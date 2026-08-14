@@ -1,0 +1,47 @@
+{
+  "name": "@aether/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aether desktop companion (Electron overlay + Alya mascot).",
+  "main": "./out/main/index.js",
+  "author": "Aether",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "start": "electron-vite preview",
+    "package": "electron-vite build && electron-builder"
+  },
+  "dependencies": {
+    "@aether/shared": "*",
+    "@ai-sdk/openai": "^1.0.0",
+    "@composio/core": "^0.1.0",
+    "ai": "^4.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/react": "^18.3.4",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^32.1.0",
+    "electron-builder": "^25.0.5",
+    "electron-vite": "^2.3.0",
+    "pixi.js": "^7.4.2",
+    "pixi-live2d-display-lipsyncpatch": "^0.5.0-ls-7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.2"
+  },
+  "build": {
+    "appId": "dev.aether.companion",
+    "productName": "Aether",
+    "files": ["out/**/*", "resources/**/*"],
+    "extraResources": [{ "from": "../../services/voice", "to": "voice", "filter": ["**/*", "!**/__pycache__/**", "!models/**"] }],
+    "mac": { "category": "public.app-category.productivity" },
+    "win": { "target": "nsis" },
+    "linux": { "target": "AppImage", "category": "Utility" }
+  }
+}

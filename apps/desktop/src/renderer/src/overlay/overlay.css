@@ -1,0 +1,155 @@
+.overlay {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px;
+  gap: 6px;
+}
+
+.overlay__bubble-wrap {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.bubble {
+  max-width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.bubble__user {
+  font-size: 0.78rem;
+  color: #9aa6c4;
+  margin-bottom: 4px;
+}
+
+.bubble__assistant {
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.status-pill {
+  font-size: 0.75rem;
+  color: #05060d;
+  background: linear-gradient(120deg, var(--accent), #7ef0d4);
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.status-pill--error {
+  background: #ff9a9a;
+  color: #3a0000;
+}
+
+.mascot {
+  flex: 1 1 auto;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 0;
+}
+
+.mascot__canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.avatar {
+  width: 260px;
+  height: 340px;
+  animation: bob 4s ease-in-out infinite;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.4));
+}
+
+.avatar--listening {
+  animation: bob 2s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.avatar__ring {
+  transform-origin: center;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.25; r: 88px; }
+  50% { opacity: 0.7; r: 96px; }
+}
+
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 8px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+.dock__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.9rem;
+  padding: 6px 4px;
+}
+
+.dock__input:focus {
+  outline: none;
+}
+
+.dock button {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e7ecf5;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 0.95rem;
+  display: grid;
+  place-items: center;
+}
+
+.dock button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.mic--on {
+  background: #ff6b6b !important;
+  animation: micpulse 1s ease-in-out infinite;
+}
+
+@keyframes micpulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 107, 107, 0); }
+}
+
+.dock__send {
+  background: linear-gradient(120deg, var(--accent), var(--accent2)) !important;
+  color: #05060d !important;
+}
