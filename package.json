@@ -1,0 +1,31 @@
+{
+  "name": "aether",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aether — a desktop AI companion with the Alya mascot: voice commands, app integrations, and an Alya-voiced (RVC) assistant.",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @aether/desktop",
+    "dev:desktop": "npm run dev --workspace @aether/desktop",
+    "dev:voice": "python3 services/voice/run.py",
+    "build": "npm run build --workspace @aether/shared && npm run build --workspace @aether/desktop",
+    "typecheck": "npm run typecheck --workspace @aether/shared && npm run typecheck --workspace @aether/desktop",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "concurrently": "^9.0.1",
+    "eslint": "^9.9.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.2.0"
+  }
+}
