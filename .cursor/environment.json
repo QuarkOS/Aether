@@ -1,0 +1,15 @@
+{
+  "name": "Aether",
+  "install": "npm install\nnpm run build --workspace @aether/shared\npython3 -m venv services/voice/.venv\nservices/voice/.venv/bin/pip install --upgrade pip\nservices/voice/.venv/bin/pip install -r services/voice/requirements.txt",
+  "terminals": [
+    {
+      "name": "voice",
+      "command": "AETHER_MODELS_DIR=\"$PWD/services/voice/models\" services/voice/.venv/bin/python services/voice/run.py"
+    },
+    {
+      "name": "desktop",
+      "command": "AETHER_PYTHON=\"$PWD/services/voice/.venv/bin/python\" npm run dev"
+    }
+  ],
+  "ports": [{ "name": "voice", "port": 8760 }]
+}
