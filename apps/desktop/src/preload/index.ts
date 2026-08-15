@@ -4,6 +4,10 @@ import type { AetherBridge, AgentEvent, AppConfig } from "@aether/shared";
 const bridge: AetherBridge = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   setConfig: (patch: Partial<AppConfig>) => ipcRenderer.invoke("config:set", patch),
+  getLocalLlmStatus: () => ipcRenderer.invoke("localLlm:status"),
+  installLocalLlm: () => ipcRenderer.invoke("localLlm:install"),
+  startLocalLlm: () => ipcRenderer.invoke("localLlm:start"),
+  stopLocalLlm: () => ipcRenderer.invoke("localLlm:stop"),
   onAgentEvent: (cb: (event: AgentEvent) => void) => {
     const listener = (_e: unknown, event: AgentEvent) => cb(event);
     ipcRenderer.on("agent-event", listener);

@@ -77,6 +77,45 @@ code {
   font-size: 0.82em;
 }
 
+.local-llm {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.local-llm-status {
+  flex: 1 1 auto;
+  color: #c7d0ea;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.local-llm-progress {
+  width: 100%;
+  height: 8px;
+  margin: 4px 0 10px;
+}
+
+.local-llm-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.local-llm-actions button {
+  background: linear-gradient(120deg, var(--accent), var(--accent2));
+  color: #05060d;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.local-llm-actions button:disabled {
+  opacity: 0.35;
+}
+
 .health {
   margin-top: 12px;
   font-size: 0.85rem;
