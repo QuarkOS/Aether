@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { AssistantState, Emotion } from "@aether/shared";
 
-import { FallbackAvatar } from "./FallbackAvatar";
+import { ImageAvatar } from "./ImageAvatar";
 import { useLive2D } from "./useLive2D";
 
 interface Props {
@@ -39,7 +39,7 @@ export function Mascot({ emotion, mouthOpen, gaze, state, modelUrl, scale }: Pro
         style={{ display: useLive2DView ? "block" : "none" }}
       />
       {!useLive2DView && (
-        <FallbackAvatar emotion={emotion} mouthOpen={mouthOpen} gaze={gaze} state={state} />
+        <ImageAvatar emotion={emotion} mouthOpen={mouthOpen} gaze={gaze} state={state} />
       )}
     </div>
   );

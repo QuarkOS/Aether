@@ -55,9 +55,10 @@ export function OverlayApp() {
       const loop = () => {
         const now = performance.now();
         const fresh = now - ampRef.current.t < 140 ? ampRef.current.value : 0;
-        // Use real amplitude when audio is playing; otherwise a lively synthetic flap.
-        const synth = 0.12 + 0.5 * Math.abs(Math.sin(now / 70)) * (0.7 + 0.3 * Math.random());
-        setMouthOpen(fresh > 0.03 ? fresh : synth);
+        // Use real amplitude when audio is playing; otherwise a synthetic flap with
+        // distinct open and closed phases (~2/sec) that clearly crosses the 0.33 threshold.
+        const synth = 0.1 + 0.75 * (0.5 + 0.5 * Math.sin(now / 130));
+        setMouthOpen(fresh > 0.05 ? fresh : synth);
         speakRafRef.current = requestAnimationFrame(loop);
       };
       speakRafRef.current = requestAnimationFrame(loop);
