@@ -1,0 +1,5 @@
+# Heavy, GPU-oriented extras for the Alya voice (RVC v2). Install separately:
+#   pip install -r requirements-ml.txt
+# On CUDA machines install the matching torch build from https://pytorch.org.
+torch>=2.1
+rvc-python>=0.1.5

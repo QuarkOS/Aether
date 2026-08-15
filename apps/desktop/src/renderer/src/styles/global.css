@@ -1,0 +1,39 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #e7ecf5;
+  --accent: #8ab4ff;
+  --accent2: #c9a6ff;
+  --panel: rgba(18, 22, 40, 0.92);
+  --border: #2b3566;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+/* Overlay window must be fully transparent so only the mascot + bubble show. */
+body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* The settings view opts back into an opaque background. */
+body.settings {
+  background: radial-gradient(circle at 20% 20%, #1b2450 0%, #0a0e1f 60%, #05060d 100%);
+  overflow: auto;
+  user-select: text;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+}

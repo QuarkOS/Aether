@@ -1,46 +1,66 @@
 # Aether
 
-A full-stack TypeScript starter: an Express REST API and a React + Vite web client, managed as npm workspaces. The demo app is a "signal board" where you broadcast short messages.
+Aether is a desktop AI companion. The mascot **Alya** lives in the corner of your
+screen (or hides in the tray), listens to voice commands, drives an LLM agent with
+real app integrations via [Composio](https://composio.dev), and replies in Alya's
+voice using an edge-tts → RVC voice pipeline.
+
+## Features
+
+- Transparent, always-on-top, click-through mascot overlay (Electron) with a tray/background mode.
+- Built-in high-quality anime Alya mascot (transparent, head-and-shoulders portrait) with per-emotion expressions and a two-frame mouth flap for lip-sync; optionally point it at a Live2D `.model3.json` in Settings to use `pixi-live2d-display` instead.
+- Voice in: push-to-talk global hotkey → `faster-whisper` STT. Text input also works.
+- Voice out: `edge-tts` base speech re-timbred to Alya with RVC v2 (`rvc-python`).
+- Agent brain: OpenAI (Vercel AI SDK), provider-pluggable, with an offline fallback so it runs without a key.
+- App integrations: connect Gmail, Google Calendar, GitHub, Slack, Notion, and more through Composio.
+
+## Architecture
+
+- `apps/desktop` — Electron + Vite + React. Main process hosts the agent (LLM + Composio) and orchestration; the renderer draws the mascot, captures the mic, and plays/lip-syncs audio.
+- `services/voice` — Python FastAPI sidecar for STT + edge-tts + RVC. Launched automatically by the desktop app.
+- `packages/shared` — shared TypeScript contracts (config, agent events, IPC).
 
 ## Requirements
 
-- Node.js >= 20 (repo tested on Node 22)
-- npm >= 10
+- Node.js >= 20, npm >= 10
+- Python >= 3.10 with `ffmpeg` on PATH
+- Optional: an NVIDIA (CUDA) or Apple Silicon (MPS) GPU for low-latency Alya voice (RVC)
 
 ## Getting started
 
 ```bash
-npm install   # installs all workspaces
-npm run dev   # starts the API (http://localhost:3001) and web app (http://localhost:5173)
+npm install
+
+# Voice service deps (base is enough to run; ML extras add the Alya RVC voice)
+python3 -m venv services/voice/.venv
+. services/voice/.venv/bin/activate
+pip install -r services/voice/requirements.txt
+# Optional, GPU recommended:
+# pip install -r services/voice/requirements-ml.txt
+deactivate
+
+npm run dev   # launches the Electron app; it starts the voice sidecar automatically
 ```
 
-The web dev server proxies `/api/*` to the API, so open http://localhost:5173 and start broadcasting.
+Set API keys as environment variables before launching (never stored in config):
 
-## Workspaces
-
-- `server/` — Express + TypeScript API (`@aether/server`). In-memory signal store; no external services required.
-- `web/` — React + Vite + TypeScript client (`@aether/web`).
-
-## API
-
-| Method | Path | Description |
-| --- | --- | --- |
-| `GET` | `/api/health` | Liveness check. |
-| `GET` | `/api/signals` | List signals (newest first). |
-| `POST` | `/api/signals` | Create a signal. Body: `{ "author": string, "message": string }`. |
-| `DELETE` | `/api/signals/:id` | Delete a signal. |
+```bash
+export OPENAI_API_KEY=...      # assistant brain (or set provider to "none")
+export COMPOSIO_API_KEY=...    # app integrations
+```
 
 ## Scripts
 
-Run from the repo root:
+- `npm run dev` — run the desktop app (spawns the Python voice service).
+- `npm run dev:voice` — run only the voice service.
+- `npm run build` — type-check + build shared package and the Electron app.
+- `npm run typecheck` — type-check all TypeScript.
+- `npm run lint` — lint the repo.
+- `npm run package --workspace @aether/desktop` — build installers (electron-builder).
 
-- `npm run dev` — run API and web dev servers together.
-- `npm run build` — type-check and build both workspaces.
-- `npm run typecheck` — type-check both workspaces.
-- `npm run lint` — lint the repo with ESLint.
-- `npm test` — run the API unit tests.
+## Configuration
 
-## Cloud Agent environment
-
-`.cursor/environment.json` runs `npm install` on setup and starts the `api` and `web`
-dev servers as persistent terminals, exposing ports `3001` and `5173`.
+Open **Settings** from the mascot dock or tray to choose the LLM provider/model,
+base TTS voice, RVC model + pitch, push-to-talk hotkey, Whisper size, mascot model
+(`placeholder` or a Live2D `.model3.json` path/URL), overlay corner, click-through,
+and to connect Composio app integrations.
