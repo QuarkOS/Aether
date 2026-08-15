@@ -17,7 +17,8 @@
     "build": "npm run build --workspace @aether/shared && npm run build --workspace @aether/desktop",
     "typecheck": "npm run typecheck --workspace @aether/shared && npm run typecheck --workspace @aether/desktop",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "package:win": "npm run build --workspace @aether/shared && npm run package:win --workspace @aether/desktop"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
