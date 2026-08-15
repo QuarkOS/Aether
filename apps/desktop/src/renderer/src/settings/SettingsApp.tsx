@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import type { AppConfig, LocalLlmStatus, SecretsStatus, VoiceHealth } from "@aether/shared";
+import type {
+  AppConfig,
+  IntegrationToolkitStatus,
+  LocalLlmStatus,
+  SecretsStatus,
+  VoiceHealth,
+} from "@aether/shared";
 import { DEFAULT_CONFIG } from "@aether/shared";
 
 import "./settings.css";
@@ -67,6 +73,7 @@ export function SettingsApp() {
   const [openaiDraft, setOpenaiDraft] = useState("");
   const [composioDraft, setComposioDraft] = useState("");
   const [toolkits, setToolkits] = useState<string[]>([]);
+  const [integrationStatus, setIntegrationStatus] = useState<IntegrationToolkitStatus[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("welcome");
 
@@ -80,8 +87,10 @@ export function SettingsApp() {
     void window.aether.getLocalLlmStatus().then(setLocalLlm);
     void window.aether.getSecretsStatus().then(setSecrets);
     void window.aether.listToolkits().then(setToolkits);
+    void window.aether.listIntegrationStatus().then(setIntegrationStatus);
     const interval = window.setInterval(() => {
       void window.aether.getVoiceHealth().then(setHealth);
+      void window.aether.listIntegrationStatus().then(setIntegrationStatus);
     }, 5000);
     return () => window.clearInterval(interval);
   }, []);
@@ -111,14 +120,21 @@ export function SettingsApp() {
     const list = enabled
       ? config.integrations.enabledToolkits.filter((t) => t !== slug)
       : [...config.integrations.enabledToolkits, slug];
-    void patch({ integrations: { ...config.integrations, enabledToolkits: list } });
+    void patch({ integrations: { ...config.integrations, enabledToolkits: list } }).then(() => {
+      void window.aether.listIntegrationStatus().then(setIntegrationStatus);
+    });
   };
 
   const connect = async (slug: string) => {
     setNotice(null);
+    if (!secrets.composio) {
+      setNotice("Save a Composio API key before connecting.");
+      return;
+    }
     const res = await window.aether.connectToolkit(slug);
     if ("error" in res) setNotice(res.error);
-    else setNotice(`Opened a browser window to connect ${slug}. Approve access, then it's ready.`);
+    else setNotice(`Opened a browser window to connect ${slug}. Approve access, then refresh status.`);
+    setIntegrationStatus(await window.aether.listIntegrationStatus());
   };
 
   const runLocalLlm = async (op: "install" | "start" | "stop") => {
@@ -407,20 +423,29 @@ export function SettingsApp() {
           Stored with OS encryption. Env <code>COMPOSIO_API_KEY</code> still wins when set. Enable a toolkit, then Connect.
         </p>
         <div className="toolkits">
-          {toolkits.map((slug) => {
-            const enabled = config.integrations.enabledToolkits.includes(slug);
-            return (
-              <div key={slug} className={`toolkit ${enabled ? "toolkit--on" : ""}`}>
-                <span className="toolkit__name">{slug}</span>
-                <label className="toolkit__toggle">
-                  <input type="checkbox" checked={enabled} onChange={() => toggleToolkit(slug)} /> enabled
-                </label>
-                <button type="button" disabled={!secrets.composio && !composioDraft} onClick={() => connect(slug)}>
-                  Connect
-                </button>
-              </div>
-            );
-          })}
+          {(integrationStatus.length
+            ? integrationStatus
+            : toolkits.map(
+                (slug): IntegrationToolkitStatus => ({
+                  slug,
+                  enabled: config.integrations.enabledToolkits.includes(slug),
+                  connected: false,
+                }),
+              )
+          ).map((row) => (
+            <div key={row.slug} className={`toolkit ${row.enabled ? "toolkit--on" : ""}`}>
+              <span className="toolkit__name">{row.slug}</span>
+              <span className="hint">
+                {row.connected ? `connected${row.accountLabel ? `: ${row.accountLabel}` : ""}` : "not connected"}
+              </span>
+              <label className="toolkit__toggle">
+                <input type="checkbox" checked={row.enabled} onChange={() => toggleToolkit(row.slug)} /> enabled
+              </label>
+              <button type="button" disabled={!secrets.composio} onClick={() => connect(row.slug)}>
+                Connect
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 

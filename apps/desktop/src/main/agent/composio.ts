@@ -87,7 +87,7 @@ export async function connectToolkit(
   toolkit: string,
 ): Promise<{ redirectUrl: string } | { error: string }> {
   const client = await getClient();
-  if (!client) return { error: "Composio is not configured (missing COMPOSIO_API_KEY)." };
+  if (!client) return { error: "Composio is not configured. Save a Composio API key in Settings." };
   const userId = config.integrations.userId;
   try {
     // Current SDK path: connected_accounts.link(userId, toolkit)
@@ -111,14 +111,51 @@ export async function connectToolkit(
 
 /** Lists popular toolkit slugs the user can connect. Static list keeps UI usable offline. */
 export function popularToolkits(): string[] {
-  return [
-    "gmail",
-    "googlecalendar",
-    "github",
-    "slack",
-    "notion",
-    "linear",
-    "spotify",
-    "googledocs",
-  ];
+  return ["gmail", "googlecalendar", "github", "slack", "notion"];
+}
+
+export async function listIntegrationStatus(config: AppConfig): Promise<
+  import("@aether/shared").IntegrationToolkitStatus[]
+> {
+  const slugs = popularToolkits();
+  const enabled = new Set(config.integrations.enabledToolkits);
+  const client = await getClient();
+  const connected = new Map<string, string>();
+
+  if (client) {
+    try {
+      const accounts =
+        (await client.connectedAccounts?.list?.({ userId: config.integrations.userId })) ??
+        (await client.connectedAccounts?.get?.({ userIds: [config.integrations.userId] })) ??
+        [];
+      const items = Array.isArray(accounts) ? accounts : (accounts?.items ?? accounts?.data ?? []);
+      for (const acct of items) {
+        const toolkit: string | undefined =
+          acct.appUniqueId ?? acct.toolkitSlug ?? acct.toolkit ?? acct.appName ?? acct.appUniqueName;
+        if (!toolkit) continue;
+        const label: string =
+          acct.accountLabel ?? acct.email ?? acct.status ?? acct.id ?? "connected";
+        connected.set(String(toolkit).toLowerCase(), String(label));
+      }
+    } catch (err) {
+      console.error("[composio] list connected accounts failed:", err);
+      return slugs.map((slug) => ({
+        slug,
+        enabled: enabled.has(slug),
+        connected: false,
+        lastError: client ? `Could not refresh status: ${String(err)}` : undefined,
+      }));
+    }
+  }
+
+  return slugs.map((slug) => {
+    const label = connected.get(slug.toLowerCase());
+    return {
+      slug,
+      enabled: enabled.has(slug),
+      connected: Boolean(label),
+      accountLabel: label,
+      lastError: !client ? "Composio key not configured" : undefined,
+    };
+  });
 }
