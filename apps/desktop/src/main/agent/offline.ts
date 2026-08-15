@@ -37,13 +37,13 @@ export function offlineReply(input: string): { text: string; emotion: Emotion } 
   }
   if (/\b(help|what can you do|commands)\b/.test(q)) {
     return {
-      text: "I can chat, and once you connect apps and add an API key, I can send emails, manage your calendar, or file GitHub issues by voice. For now, set those up in Settings.",
+      text: "I can chat, and once you add an OPENAI_API_KEY via the environment and connect apps in Settings, I can send emails, manage your calendar, or file GitHub issues by voice.",
       emotion: "neutral",
     };
   }
   if (/\b(email|calendar|github|slack|notion)\b/.test(q)) {
     return {
-      text: "I'd love to handle that, but no assistant brain or app connection is set up yet. Add an API key and connect the app in Settings first.",
+      text: "I'd love to handle that, but no assistant brain or app connection is set up yet. Add an OPENAI_API_KEY via the environment and connect the app in Settings first.",
       emotion: "sad",
     };
   }
@@ -51,7 +51,7 @@ export function offlineReply(input: string): { text: string; emotion: Emotion } 
     return { text: "Leaving already? Fine. Poka — I'll be right here.", emotion: "shy" };
   }
   return {
-    text: `You said: "${input}". I'm running without an assistant brain right now, so add an API key in Settings and I'll actually be useful.`,
+    text: `You said: "${input}". I'm running without an assistant brain right now, so add an OPENAI_API_KEY (or set Provider to None for offline-only) and I'll actually be useful.`,
     emotion: "thinking",
   };
 }

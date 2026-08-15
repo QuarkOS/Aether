@@ -29,6 +29,14 @@ function deepMerge<T>(base: T, patch: Partial<T>): T {
   return out as T;
 }
 
+function normalizeConfig(config: AppConfig): AppConfig {
+  const provider: string = config.llm.provider;
+  if (provider === "anthropic" || provider === "gemini") {
+    return { ...config, llm: { ...config.llm, provider: "openai" } };
+  }
+  return config;
+}
+
 export function loadConfig(): AppConfig {
   if (cache) return cache;
   let loaded: AppConfig = { ...DEFAULT_CONFIG };
@@ -40,6 +48,7 @@ export function loadConfig(): AppConfig {
   } catch (err) {
     console.error("[config] failed to read config, using defaults:", err);
   }
+  loaded = normalizeConfig(loaded);
   if (!loaded.integrations.userId) {
     loaded.integrations.userId = `aether-${randomUUID()}`;
   }

@@ -66,7 +66,7 @@ export interface Viseme {
 /** Persisted user configuration (stored by the main process). */
 export interface AppConfig {
   llm: {
-    provider: "openai" | "anthropic" | "gemini" | "none";
+    provider: "openai" | "none";
     model: string;
   };
   voice: {
@@ -84,7 +84,6 @@ export interface AppConfig {
     pushToTalkHotkey: string;
     /** faster-whisper model size. */
     sttModel: string;
-    wakeWordEnabled: boolean;
   };
   mascot: {
     /** Model directory name under resources/models. */
@@ -108,14 +107,13 @@ export const DEFAULT_CONFIG: AppConfig = {
   llm: { provider: "openai", model: "gpt-4o-mini" },
   voice: {
     ttsVoice: "en-US-AriaNeural",
-    rvcEnabled: true,
+    rvcEnabled: false,
     rvcPitch: 0,
     rvcModel: "alya",
   },
   input: {
-    pushToTalkHotkey: "Alt+Space",
+    pushToTalkHotkey: "CommandOrControl+Shift+Space",
     sttModel: "base",
-    wakeWordEnabled: false,
   },
   mascot: {
     model: "placeholder",

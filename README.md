@@ -11,7 +11,7 @@ voice using an edge-tts → RVC voice pipeline.
 - Built-in high-quality anime Alya mascot (transparent, head-and-shoulders portrait) with per-emotion expressions and a two-frame mouth flap for lip-sync; optionally point it at a Live2D `.model3.json` in Settings to use `pixi-live2d-display` instead.
 - Voice in: push-to-talk global hotkey → `faster-whisper` STT. Text input also works.
 - Voice out: `edge-tts` base speech re-timbred to Alya with RVC v2 (`rvc-python`).
-- Agent brain: OpenAI (Vercel AI SDK), provider-pluggable, with an offline fallback so it runs without a key.
+- Agent brain: OpenAI (Vercel AI SDK), or None for offline replies, with a rule-based fallback when no `OPENAI_API_KEY` is set.
 - App integrations: connect Gmail, Google Calendar, GitHub, Slack, Notion, and more through Composio.
 
 ## Architecture

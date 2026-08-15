@@ -4,6 +4,11 @@ import { DEFAULT_CONFIG } from "@aether/shared";
 
 import "./settings.css";
 
+function parseLlmProvider(value: string): AppConfig["llm"]["provider"] | undefined {
+  if (value === "openai" || value === "none") return value;
+  return undefined;
+}
+
 export function SettingsApp() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [health, setHealth] = useState<VoiceHealth | null>(null);
@@ -56,11 +61,13 @@ export function SettingsApp() {
           <label>Provider</label>
           <select
             value={config.llm.provider}
-            onChange={(e) => patch({ llm: { ...config.llm, provider: e.target.value as AppConfig["llm"]["provider"] } })}
+            onChange={(e) => {
+              const provider = parseLlmProvider(e.target.value);
+              if (!provider) return;
+              void patch({ llm: { ...config.llm, provider } });
+            }}
           >
             <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="gemini">Gemini</option>
             <option value="none">None (offline replies)</option>
           </select>
         </div>
@@ -69,8 +76,7 @@ export function SettingsApp() {
           <input value={config.llm.model} onChange={(e) => patch({ llm: { ...config.llm, model: e.target.value } })} />
         </div>
         <p className="hint">
-          API keys are read from environment variables (<code>OPENAI_API_KEY</code>, etc.) for safety and are never
-          stored in this config file.
+          API keys are read from the environment (<code>OPENAI_API_KEY</code>) and are never stored in this config file.
         </p>
       </section>
 
@@ -84,6 +90,10 @@ export function SettingsApp() {
           <label>Alya voice (RVC)</label>
           <input type="checkbox" checked={config.voice.rvcEnabled} onChange={(e) => patch({ voice: { ...config.voice, rvcEnabled: e.target.checked } })} />
         </div>
+        <p className="hint">
+          RVC is off by default. It needs the optional ML extras (<code>requirements-ml.txt</code>) and a GPU. If
+          health below says RVC unavailable, the base TTS voice is used instead.
+        </p>
         <div className="row">
           <label>RVC model</label>
           <input value={config.voice.rvcModel} onChange={(e) => patch({ voice: { ...config.voice, rvcModel: e.target.value } })} />
