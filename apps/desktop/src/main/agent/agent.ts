@@ -3,6 +3,7 @@ import type { AgentEvent, AppConfig, Emotion } from "@aether/shared";
 import { getComposioTools } from "./composio.js";
 import { offlineReply } from "./offline.js";
 import { parseEmotion, SYSTEM_PROMPT } from "./persona.js";
+import { resolveOpenAiKey } from "../secrets.js";
 
 interface HistoryMessage {
   role: "user" | "assistant";
@@ -22,7 +23,7 @@ function hasLlm(config: AppConfig): boolean {
   if (config.llm.provider === "openai-compatible") {
     return Boolean(config.llm.baseUrl.trim());
   }
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(resolveOpenAiKey());
 }
 
 export interface AgentTurnResult {
@@ -55,7 +56,7 @@ export async function runAgentTurn(
 
     const compatible = config.llm.provider === "openai-compatible";
     const baseURL = compatible ? config.llm.baseUrl.trim() : undefined;
-    const apiKey = process.env.OPENAI_API_KEY || (compatible ? "local" : undefined);
+    const apiKey = resolveOpenAiKey() || (compatible ? "local" : undefined);
     const client = createOpenAI({
       ...(baseURL ? { baseURL } : {}),
       ...(apiKey ? { apiKey } : {}),

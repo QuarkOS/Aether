@@ -1,0 +1,3 @@
+ts	phase	decision	why	evidence	result
+2026-08-15T09:47:00Z	frame	Autonomous run not Orchestrate; exit = phases 4-11 stacked + tip typecheck/lint green + stack merged to main + this PC can npm run dev	one session can finish; Orchestrate ceremony would slow clone-shaped units	docs/plans/01-v1-release/overview.md	open
+2026-08-15T09:47:30Z	frame	Keep one PR per phase then merge the contiguous stack	matches prior human choice stack-then-merge	PRs #3 #4 #5	open

@@ -5,6 +5,13 @@ import { connectToolkit, popularToolkits } from "./agent/composio.js";
 import { loadConfig, updateConfig } from "./config.js";
 import { broadcast, handleUserAudio, handleUserText } from "./controller.js";
 import { getLocalLlmStatus, installLocalLlm, startLocalLlm, stopLocalLlm } from "./localLlm/status.js";
+import {
+  clearSecret,
+  getSecretsStatus,
+  isSecretId,
+  setSecret,
+  type SecretId,
+} from "./secrets.js";
 import { getHealth } from "./voiceService.js";
 import {
   openExternal,
@@ -68,6 +75,16 @@ export function registerIpc(onConfigChange: (config: AppConfig) => void, onQuit:
   ipcMain.handle("localLlm:install", () => installLocalLlm());
   ipcMain.handle("localLlm:start", () => startLocalLlm());
   ipcMain.handle("localLlm:stop", () => stopLocalLlm());
+
+  ipcMain.handle("secrets:status", () => getSecretsStatus());
+  ipcMain.handle("secrets:set", (_e, id: string, value: string) => {
+    if (!isSecretId(id)) return { error: `Unknown secret id: ${id}` };
+    return setSecret(id, value);
+  });
+  ipcMain.handle("secrets:clear", (_e, id: string) => {
+    if (!isSecretId(id)) return;
+    clearSecret(id as SecretId);
+  });
 
   ipcMain.handle("settings:open", () => {
     openSettingsWindow();

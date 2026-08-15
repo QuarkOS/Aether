@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AppConfig, LocalLlmStatus, VoiceHealth } from "@aether/shared";
+import type { AppConfig, LocalLlmStatus, SecretsStatus, VoiceHealth } from "@aether/shared";
 import { DEFAULT_CONFIG } from "@aether/shared";
 
 import "./settings.css";
@@ -10,6 +10,7 @@ function parseLlmProvider(value: string): AppConfig["llm"]["provider"] | undefin
 }
 
 const DEFAULT_COMPAT_BASE_URL = "http://127.0.0.1:11434/v1";
+const EMPTY_SECRETS: SecretsStatus = { openai: false, composio: false };
 
 function localLlmLabel(status: LocalLlmStatus): string {
   switch (status.state) {
@@ -41,6 +42,9 @@ export function SettingsApp() {
   const [health, setHealth] = useState<VoiceHealth | null>(null);
   const [localLlm, setLocalLlm] = useState<LocalLlmStatus>({ state: "missing" });
   const [localLlmBusy, setLocalLlmBusy] = useState(false);
+  const [secrets, setSecrets] = useState<SecretsStatus>(EMPTY_SECRETS);
+  const [openaiDraft, setOpenaiDraft] = useState("");
+  const [composioDraft, setComposioDraft] = useState("");
   const [toolkits, setToolkits] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -49,6 +53,7 @@ export function SettingsApp() {
     void window.aether.getConfig().then(setConfig);
     void window.aether.getVoiceHealth().then(setHealth);
     void window.aether.getLocalLlmStatus().then(setLocalLlm);
+    void window.aether.getSecretsStatus().then(setSecrets);
     void window.aether.listToolkits().then(setToolkits);
     const interval = window.setInterval(() => {
       void window.aether.getVoiceHealth().then(setHealth);
@@ -107,6 +112,25 @@ export function SettingsApp() {
     }
   };
 
+  const saveSecret = async (id: "openai" | "composio", value: string) => {
+    setNotice(null);
+    const res = await window.aether.setSecret(id, value);
+    if ("error" in res) {
+      setNotice(res.error);
+      return;
+    }
+    setSecrets(await window.aether.getSecretsStatus());
+    if (id === "openai") setOpenaiDraft("");
+    else setComposioDraft("");
+    setNotice(id === "openai" ? "OpenAI key saved." : "Composio key saved.");
+  };
+
+  const wipeSecret = async (id: "openai" | "composio") => {
+    await window.aether.clearSecret(id);
+    setSecrets(await window.aether.getSecretsStatus());
+    setNotice(id === "openai" ? "OpenAI key cleared." : "Composio key cleared.");
+  };
+
   const windowsOnly = Boolean(localLlm.message?.includes("Windows-only"));
   const inFlight =
     localLlmBusy || localLlm.state === "downloading" || localLlm.state === "starting";
@@ -159,10 +183,34 @@ export function SettingsApp() {
             />
           </div>
         )}
+        {config.llm.provider === "openai" && (
+          <>
+            <div className="row">
+              <label>OpenAI API key</label>
+              <input
+                type="password"
+                autoComplete="off"
+                placeholder={secrets.openai ? "•••••••• (saved)" : "sk-..."}
+                value={openaiDraft}
+                onChange={(e) => setOpenaiDraft(e.target.value)}
+              />
+            </div>
+            <div className="local-llm-actions">
+              <button type="button" disabled={!openaiDraft.trim()} onClick={() => void saveSecret("openai", openaiDraft)}>
+                Save key
+              </button>
+              <button type="button" disabled={!secrets.openai} onClick={() => void wipeSecret("openai")}>
+                Clear
+              </button>
+            </div>
+          </>
+        )}
         <p className="hint">
           {config.llm.provider === "openai-compatible"
             ? "Point at Ollama, LM Studio, llama.cpp, or any OpenAI-compatible /v1 server. No cloud API key required."
-            : <>API keys are read from the environment (<code>OPENAI_API_KEY</code>) and are never stored in this config file.</>}
+            : config.llm.provider === "openai"
+              ? <>Keys are stored with OS encryption, not in the config file. A process env <code>OPENAI_API_KEY</code> still wins when set.</>
+              : "Offline rule-based replies only."}
         </p>
         <div className="local-llm">
           <div className="row">
@@ -273,7 +321,27 @@ export function SettingsApp() {
 
       <section className="card">
         <h2>App integrations (Composio)</h2>
-        <p className="hint">Enable a toolkit, then Connect to authorize your account. Requires <code>COMPOSIO_API_KEY</code>.</p>
+        <div className="row">
+          <label>Composio API key</label>
+          <input
+            type="password"
+            autoComplete="off"
+            placeholder={secrets.composio ? "•••••••• (saved)" : "composio key"}
+            value={composioDraft}
+            onChange={(e) => setComposioDraft(e.target.value)}
+          />
+        </div>
+        <div className="local-llm-actions">
+          <button type="button" disabled={!composioDraft.trim()} onClick={() => void saveSecret("composio", composioDraft)}>
+            Save key
+          </button>
+          <button type="button" disabled={!secrets.composio} onClick={() => void wipeSecret("composio")}>
+            Clear
+          </button>
+        </div>
+        <p className="hint">
+          Stored with OS encryption. Env <code>COMPOSIO_API_KEY</code> still wins when set. Enable a toolkit, then Connect.
+        </p>
         <div className="toolkits">
           {toolkits.map((slug) => {
             const enabled = config.integrations.enabledToolkits.includes(slug);
@@ -283,7 +351,9 @@ export function SettingsApp() {
                 <label className="toolkit__toggle">
                   <input type="checkbox" checked={enabled} onChange={() => toggleToolkit(slug)} /> enabled
                 </label>
-                <button onClick={() => connect(slug)}>Connect</button>
+                <button type="button" disabled={!secrets.composio && !composioDraft} onClick={() => connect(slug)}>
+                  Connect
+                </button>
               </div>
             );
           })}
