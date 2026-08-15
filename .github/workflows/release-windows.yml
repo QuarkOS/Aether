@@ -19,6 +19,14 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Verify electron-builder binaries
+        shell: pwsh
+        run: |
+          $p = "node_modules/app-builder-bin/win/x64/app-builder.exe"
+          if (-not (Test-Path $p)) {
+            npm rebuild app-builder-bin
+          }
+          if (-not (Test-Path $p)) { throw "missing $p" }
       - name: Package Windows installer
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
