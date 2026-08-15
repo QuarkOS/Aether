@@ -182,7 +182,20 @@ export function OverlayApp() {
         <button
           className={`mic ${recording ? "mic--on" : ""}`}
           title="Push to talk"
-          onClick={() => (recording ? stop() : void start())}
+          onClick={() => {
+            setError(null);
+            void (async () => {
+              if (recording) stop();
+              else {
+                try {
+                  await window.aether.startListening();
+                  await start();
+                } catch (err) {
+                  setError(`Microphone unavailable: ${String(err)}`);
+                }
+              }
+            })();
+          }}
         >
           {recording ? "■" : "🎙"}
         </button>

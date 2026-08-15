@@ -1,4 +1,5 @@
 import { nativeImage, Menu, Tray } from "electron";
+import { join } from "node:path";
 
 import { loadConfig, updateConfig } from "./config.js";
 import {
@@ -10,14 +11,17 @@ import {
 
 let tray: Tray | null = null;
 
-/** 16x16 transparent PNG with a small magenta dot, encoded to avoid shipping asset files. */
-const TRAY_ICON_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAWklEQVR42mNgGAWjYBSMglEwCkbBKBgFo2AUjIJRMApGwSgYBaNgFIyCUTAKRsEoGAWjYBSMglEwCkbBKBgFo2AUjIJRMApGwSgYBaNgFIyCUTAKRsEoAAB3lgGBj2Q9wAAAABJRU5ErkJggg==";
+function loadTrayIcon(): Electron.NativeImage {
+  const fromFile = nativeImage.createFromPath(join(__dirname, "../../resources/tray-icon.png"));
+  if (!fromFile.isEmpty()) return fromFile.resize({ width: 16, height: 16 });
+  return nativeImage.createFromDataURL(
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVR42mNgGAWjYBSMAjIB/xkwACkgGgYYjYpRMApGwSgYBaNgFIyCUTAKRsEoGAVDAQCVxgGBj2Q9wAAAAABJRU5ErkJggg==",
+  );
+}
 
 export function createTray(onQuit: () => void): Tray {
   if (tray) return tray;
-  const icon = nativeImage.createFromDataURL(TRAY_ICON_DATA_URL);
-  tray = new Tray(icon);
+  tray = new Tray(loadTrayIcon());
   tray.setToolTip("Aether — Alya assistant");
   rebuildMenu(onQuit);
   tray.on("click", () => toggleOverlayVisibility());

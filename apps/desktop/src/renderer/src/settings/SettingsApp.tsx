@@ -362,10 +362,12 @@ export function SettingsApp() {
           <input value={config.mascot.model} onChange={(e) => patch({ mascot: { ...config.mascot, model: e.target.value } })} />
         </div>
         <p className="hint">Use <code>placeholder</code> for the built-in avatar, or a path/URL to a Live2D <code>.model3.json</code>.</p>
-        <div className="row">
-          <label>Scale</label>
-          <input type="range" min="0.1" max="0.6" step="0.01" value={config.mascot.scale} onChange={(e) => patch({ mascot: { ...config.mascot, scale: Number(e.target.value) } })} />
-        </div>
+        {config.mascot.model !== "placeholder" && (
+          <div className="row">
+            <label>Scale</label>
+            <input type="range" min="0.1" max="0.6" step="0.01" value={config.mascot.scale} onChange={(e) => patch({ mascot: { ...config.mascot, scale: Number(e.target.value) } })} />
+          </div>
+        )}
         <div className="row">
           <label>Corner</label>
           <select value={config.mascot.anchor} onChange={(e) => patch({ mascot: { ...config.mascot, anchor: e.target.value as AppConfig["mascot"]["anchor"] } })}>
@@ -436,6 +438,9 @@ export function SettingsApp() {
             }}
           >
             Show onboarding
+          </button>
+          <button type="button" onClick={() => void window.aether.quit()}>
+            Quit Aether
           </button>
         </div>
       </section>
