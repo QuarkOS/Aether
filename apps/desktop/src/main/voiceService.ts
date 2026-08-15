@@ -5,14 +5,16 @@ import { join } from "node:path";
 import { app } from "electron";
 import type { SpeakRequest, VoiceHealth } from "@aether/shared";
 
+import { ensurePackagedVoiceRuntime, getVoiceBootstrap } from "./voiceRuntime/ensure.js";
+
 const PORT = Number(process.env.AETHER_VOICE_PORT ?? 8760);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 let child: ChildProcess | null = null;
 let ready = false;
+let starting: Promise<void> | null = null;
 
 function voiceDir(): string {
-  // Packaged: bundled under resources/voice. Dev: services/voice at repo root.
   const packaged = join(process.resourcesPath ?? "", "voice");
   if (app.isPackaged && existsSync(packaged)) return packaged;
   return join(app.getAppPath(), "..", "..", "services", "voice");
@@ -35,10 +37,15 @@ export async function ensureVoiceService(): Promise<void> {
     console.log("[voice] reusing already-running voice service.");
     return;
   }
-  startVoiceService();
+  if (!starting) {
+    starting = startVoiceService().finally(() => {
+      starting = null;
+    });
+  }
+  await starting;
 }
 
-export function startVoiceService(): void {
+export async function startVoiceService(): Promise<void> {
   if (child) return;
   const dir = voiceDir();
   const runner = join(dir, "run.py");
@@ -46,12 +53,26 @@ export function startVoiceService(): void {
     console.error(`[voice] run.py not found at ${runner}; voice features disabled.`);
     return;
   }
-  const python = pythonExecutable(dir);
+
+  let python = pythonExecutable(dir);
+  let pathEnv = process.env.PATH ?? "";
+  if (app.isPackaged && process.platform === "win32") {
+    try {
+      const runtime = await ensurePackagedVoiceRuntime(dir);
+      python = runtime.python;
+      pathEnv = `${runtime.pathPrefix};${pathEnv}`;
+    } catch (err) {
+      console.error("[voice] packaged runtime bootstrap failed:", err);
+      return;
+    }
+  }
+
   console.log(`[voice] starting: ${python} ${runner} (port ${PORT})`);
   child = spawn(python, [runner], {
     cwd: dir,
     env: {
       ...process.env,
+      PATH: pathEnv,
       AETHER_VOICE_PORT: String(PORT),
       AETHER_MODELS_DIR: join(app.getPath("userData"), "voice-models"),
     },
@@ -78,7 +99,7 @@ async function tryFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${BASE_URL}${path}`, init);
 }
 
-export async function waitForVoiceReady(timeoutMs = 45000): Promise<boolean> {
+export async function waitForVoiceReady(timeoutMs = 120_000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -99,12 +120,30 @@ export function isReady(): boolean {
   return ready;
 }
 
-export async function getHealth(): Promise<VoiceHealth | null> {
+export async function getHealth(): Promise<(VoiceHealth & { bootstrap?: string }) | null> {
   try {
     const res = await tryFetch("/health");
     if (!res.ok) return null;
-    return (await res.json()) as VoiceHealth;
+    const body = (await res.json()) as VoiceHealth;
+    const boot = getVoiceBootstrap();
+    return {
+      ...body,
+      bootstrap: boot.state === "ready" || boot.state === "idle" ? undefined : boot.message || boot.state,
+    };
   } catch {
+    const boot = getVoiceBootstrap();
+    if (boot.state === "downloading" || boot.state === "installing") {
+      return {
+        ok: false,
+        device: "bootstrapping",
+        ttsAvailable: false,
+        sttAvailable: false,
+        rvcAvailable: false,
+        rvcModelLoaded: false,
+        models: [],
+        bootstrap: boot.message,
+      };
+    }
     return null;
   }
 }
