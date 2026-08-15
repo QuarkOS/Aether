@@ -15,6 +15,7 @@ V1 closes that gap. Audience is a public Windows GitHub Release. Scope is Core p
 - Windows NSIS installer published as a GitHub Release artifact
 - PNG Alya mascot, dock text, push-to-talk, tray quit
 - OpenAI cloud brain, OpenAI-compatible local servers (Ollama, LM Studio, llama.cpp, vLLM), or offline fallback
+- Windows one-click llama.cpp auto-setup with default `Qwen3.5-9B-ultra-uncensored-heretic-v1` Q4_K_M (~5.6 GB into userData)
 - edge-tts speech (internet required to speak)
 - API keys entered in Settings, stored via Electron `safeStorage`
 - First-run onboarding (keys, local base URL, mic, what works offline)
@@ -33,7 +34,7 @@ V1 closes that gap. Audience is a public Windows GitHub Release. Scope is Core p
 - Wake word
 - Chat history window
 - Bundled Cubism core
-- Bundling Ollama or weights inside the NSIS installer
+- Bundling Ollama or GGUF weights inside the NSIS installer (auto-download to userData instead)
 
 ## Constraints
 
@@ -67,14 +68,15 @@ V1 closes that gap. Audience is a public Windows GitHub Release. Scope is Core p
 
 1. [phase-1-subtract-fiction](phase-1-subtract-fiction.md)
 2. [phase-2-openai-compatible](phase-2-openai-compatible.md)
-3. [phase-3-secrets](phase-3-secrets.md)
-4. [phase-4-onboarding](phase-4-onboarding.md)
-5. [phase-5-overlay-tray-ux](phase-5-overlay-tray-ux.md)
-6. [phase-6-composio-status](phase-6-composio-status.md)
-7. [phase-7-voice-runtime](phase-7-voice-runtime.md)
-8. [phase-8-windows-installer](phase-8-windows-installer.md)
-9. [phase-9-ci-release](phase-9-ci-release.md)
-10. [phase-10-docs-legal](phase-10-docs-legal.md)
+3. [phase-3-llama-cpp-autosetup](phase-3-llama-cpp-autosetup.md)
+4. [phase-4-secrets](phase-4-secrets.md)
+5. [phase-5-onboarding](phase-5-onboarding.md)
+6. [phase-6-overlay-tray-ux](phase-6-overlay-tray-ux.md)
+7. [phase-7-composio-status](phase-7-composio-status.md)
+8. [phase-8-voice-runtime](phase-8-voice-runtime.md)
+9. [phase-9-windows-installer](phase-9-windows-installer.md)
+10. [phase-10-ci-release](phase-10-ci-release.md)
+11. [phase-11-docs-legal](phase-11-docs-legal.md)
 
 Shared verification notes live in [testing.md](testing.md).
 
@@ -100,4 +102,4 @@ Runtime. Install the NSIS artifact on a clean Windows profile. Complete onboardi
 
 ## Definition of done
 
-A stranger can open the GitHub Release for `v1.0.0`, download `Aether Setup.exe`, install, choose OpenAI or a local OpenAI-compatible server, talk or type to Alya, hear edge-tts, and connect at least one Composio app with visible success or failure. No terminal required for the app install (local model server is the user's own).
+A stranger can open the GitHub Release for `v1.0.0`, download `Aether Setup.exe`, install, choose OpenAI or one-click local Qwen3.5-9B ultra-uncensored heretic llama.cpp (or any OpenAI-compatible server), talk or type to Alya, hear edge-tts, and connect at least one Composio app with visible success or failure. No terminal required for the app install.

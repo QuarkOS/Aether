@@ -147,10 +147,27 @@ export interface SpeakRequest {
   pitch?: number;
 }
 
+/** Lifecycle of the managed local llama.cpp server. */
+export type LocalLlmState = "missing" | "downloading" | "ready" | "starting" | "running" | "error";
+
+/** Snapshot of the managed local llama.cpp install and process. */
+export interface LocalLlmStatus {
+  state: LocalLlmState;
+  progress?: number;
+  message?: string;
+  baseUrl?: string;
+  modelId?: string;
+  backend?: "vulkan" | "cpu";
+}
+
 /** The API the preload script exposes to the renderer as `window.aether`. */
 export interface AetherBridge {
   getConfig(): Promise<AppConfig>;
   setConfig(patch: Partial<AppConfig>): Promise<AppConfig>;
+  getLocalLlmStatus(): Promise<LocalLlmStatus>;
+  installLocalLlm(): Promise<LocalLlmStatus>;
+  startLocalLlm(): Promise<LocalLlmStatus>;
+  stopLocalLlm(): Promise<LocalLlmStatus>;
   onAgentEvent(cb: (event: AgentEvent) => void): () => void;
   /** Fires when the global push-to-talk hotkey is pressed. */
   onPushToTalk(cb: () => void): () => void;

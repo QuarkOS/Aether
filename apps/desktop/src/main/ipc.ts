@@ -4,6 +4,7 @@ import type { AppConfig } from "@aether/shared";
 import { connectToolkit, popularToolkits } from "./agent/composio.js";
 import { loadConfig, updateConfig } from "./config.js";
 import { broadcast, handleUserAudio, handleUserText } from "./controller.js";
+import { getLocalLlmStatus, installLocalLlm, startLocalLlm, stopLocalLlm } from "./localLlm/status.js";
 import { getHealth } from "./voiceService.js";
 import {
   openExternal,
@@ -62,6 +63,11 @@ export function registerIpc(onConfigChange: (config: AppConfig) => void, onQuit:
   });
 
   ipcMain.handle("voice:health", () => getHealth());
+
+  ipcMain.handle("localLlm:status", () => getLocalLlmStatus());
+  ipcMain.handle("localLlm:install", () => installLocalLlm());
+  ipcMain.handle("localLlm:start", () => startLocalLlm());
+  ipcMain.handle("localLlm:stop", () => stopLocalLlm());
 
   ipcMain.handle("settings:open", () => {
     openSettingsWindow();

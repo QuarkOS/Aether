@@ -11,7 +11,7 @@ voice using an edge-tts → RVC voice pipeline.
 - Built-in high-quality anime Alya mascot (transparent, head-and-shoulders portrait) with per-emotion expressions and a two-frame mouth flap for lip-sync; optionally point it at a Live2D `.model3.json` in Settings to use `pixi-live2d-display` instead.
 - Voice in: push-to-talk global hotkey → `faster-whisper` STT. Text input also works.
 - Voice out: `edge-tts` base speech re-timbred to Alya with RVC v2 (`rvc-python`).
-- Agent brain: OpenAI, any OpenAI-compatible local server (Ollama, LM Studio, …), or None for offline replies.
+- Agent brain: OpenAI, any OpenAI-compatible local server (Ollama, LM Studio, llama.cpp), or None for offline replies. On Windows, Settings can download Qwen3.5-9B ultra-uncensored heretic and start llama.cpp for you (~5.6 GB).
 - App integrations: connect Gmail, Google Calendar, GitHub, Slack, Notion, and more through Composio.
 
 ## Architecture

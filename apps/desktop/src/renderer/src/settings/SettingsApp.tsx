@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AppConfig, VoiceHealth } from "@aether/shared";
+import type { AppConfig, LocalLlmStatus, VoiceHealth } from "@aether/shared";
 import { DEFAULT_CONFIG } from "@aether/shared";
 
 import "./settings.css";
@@ -11,9 +11,36 @@ function parseLlmProvider(value: string): AppConfig["llm"]["provider"] | undefin
 
 const DEFAULT_COMPAT_BASE_URL = "http://127.0.0.1:11434/v1";
 
+function localLlmLabel(status: LocalLlmStatus): string {
+  switch (status.state) {
+    case "missing":
+      return status.message ?? "Not installed";
+    case "downloading": {
+      const pct = status.progress != null ? ` ${Math.round(status.progress * 100)}%` : "";
+      return (status.message ?? "Downloading") + pct;
+    }
+    case "ready":
+      return "Downloaded. Not running.";
+    case "starting":
+      return status.message ?? "Starting llama-server...";
+    case "running": {
+      const backend = status.backend ? ` (${status.backend})` : "";
+      return `Running${backend} at ${status.baseUrl ?? "http://127.0.0.1:8765/v1"}`;
+    }
+    case "error":
+      return status.message ?? "Failed";
+    default: {
+      const _exhaustive: never = status.state;
+      return _exhaustive;
+    }
+  }
+}
+
 export function SettingsApp() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [health, setHealth] = useState<VoiceHealth | null>(null);
+  const [localLlm, setLocalLlm] = useState<LocalLlmStatus>({ state: "missing" });
+  const [localLlmBusy, setLocalLlmBusy] = useState(false);
   const [toolkits, setToolkits] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -21,12 +48,28 @@ export function SettingsApp() {
     document.body.classList.add("settings");
     void window.aether.getConfig().then(setConfig);
     void window.aether.getVoiceHealth().then(setHealth);
+    void window.aether.getLocalLlmStatus().then(setLocalLlm);
     void window.aether.listToolkits().then(setToolkits);
     const interval = window.setInterval(() => {
       void window.aether.getVoiceHealth().then(setHealth);
     }, 5000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const fast = localLlm.state === "downloading" || localLlm.state === "starting";
+    const tick = async () => {
+      const next = await window.aether.getLocalLlmStatus();
+      setLocalLlm(next);
+      if (next.state === "running") {
+        setConfig(await window.aether.getConfig());
+      }
+    };
+    const interval = window.setInterval(() => {
+      void tick();
+    }, fast ? 400 : 2500);
+    return () => window.clearInterval(interval);
+  }, [localLlm.state]);
 
   const patch = async (p: Partial<AppConfig>) => {
     const next = await window.aether.setConfig(p);
@@ -47,6 +90,30 @@ export function SettingsApp() {
     if ("error" in res) setNotice(res.error);
     else setNotice(`Opened a browser window to connect ${slug}. Approve access, then it's ready.`);
   };
+
+  const runLocalLlm = async (op: "install" | "start" | "stop") => {
+    setLocalLlmBusy(true);
+    try {
+      const next =
+        op === "install"
+          ? await window.aether.installLocalLlm()
+          : op === "start"
+            ? await window.aether.startLocalLlm()
+            : await window.aether.stopLocalLlm();
+      setLocalLlm(next);
+      setConfig(await window.aether.getConfig());
+    } finally {
+      setLocalLlmBusy(false);
+    }
+  };
+
+  const windowsOnly = Boolean(localLlm.message?.includes("Windows-only"));
+  const inFlight =
+    localLlmBusy || localLlm.state === "downloading" || localLlm.state === "starting";
+  const canSetup = !windowsOnly && !inFlight && localLlm.state !== "running";
+  const canStart =
+    !windowsOnly && !inFlight && (localLlm.state === "ready" || localLlm.state === "error");
+  const canStop = !windowsOnly && (localLlm.state === "running" || localLlm.state === "starting");
 
   return (
     <div className="settings-page">
@@ -97,6 +164,31 @@ export function SettingsApp() {
             ? "Point at Ollama, LM Studio, llama.cpp, or any OpenAI-compatible /v1 server. No cloud API key required."
             : <>API keys are read from the environment (<code>OPENAI_API_KEY</code>) and are never stored in this config file.</>}
         </p>
+        <div className="local-llm">
+          <div className="row">
+            <label>Local Heretic brain</label>
+            <span className="local-llm-status">{localLlmLabel(localLlm)}</span>
+          </div>
+          {(localLlm.state === "downloading" || localLlm.progress != null) && (
+            <progress className="local-llm-progress" max={1} value={localLlm.progress ?? 0} />
+          )}
+          <div className="local-llm-actions">
+            <button type="button" disabled={!canSetup} onClick={() => void runLocalLlm("install")}>
+              Set up
+            </button>
+            <button type="button" disabled={!canStart} onClick={() => void runLocalLlm("start")}>
+              Start
+            </button>
+            <button type="button" disabled={!canStop} onClick={() => void runLocalLlm("stop")}>
+              Stop
+            </button>
+          </div>
+          <p className="hint">
+            About 5.6 GB download on Windows. This is Qwen3.5-9B ultra-uncensored heretic, an
+            abliterated model with fewer refusals. It still has to follow the law. Alya's persona
+            prompt stays. Text weights only, no mmproj.
+          </p>
+        </div>
       </section>
 
       <section className="card">

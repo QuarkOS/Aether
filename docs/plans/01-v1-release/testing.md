@@ -5,7 +5,7 @@ Back to [overview](overview.md).
 ## Surfaces
 
 - Electron overlay and Settings via the `control-ui` skill where available
-- Packaged NSIS install on a clean Windows user profile (required for phases 7 through 9)
+- Packaged NSIS install on a clean Windows user profile (required for phases 8 through 10)
 - Voice HTTP. `GET /health`, `POST /speak`, `POST /stt` against the bootstrapped sidecar
 - Local OpenAI-compatible server (Ollama or LM Studio) for phase 2
 
@@ -15,14 +15,15 @@ Back to [overview](overview.md).
 | --- | --- |
 | 1 | Settings provider list is honest. Default hotkey works on Windows. |
 | 2 | OpenAI-compatible base URL + model replies without `OPENAI_API_KEY`. Cloud OpenAI path unchanged. |
-| 3 | Keys survive restart. Absent from `aether-config.json`. Env override still wins. |
-| 4 | First-run onboarding completes once and is re-openable. |
-| 5 | Tray Quit works. Dock mic matches PTT listening UX. |
-| 6 | Connect success and failure are visible. Tool call runs for one toolkit. |
-| 7 | Packaged app bootstraps voice with no system Python. |
-| 8 | NSIS install + uninstall. App launches from Start Menu. |
-| 9 | Tag builds Release asset on Actions. |
-| 10 | README-only install path works. |
+| 3 | Set up downloads llama-server + Qwen3.5-9B ultra-uncensored heretic GGUF (or skips if present), starts port 8765, Settings shows running. Text chat without `OPENAI_API_KEY`. Stop, then Start without re-download. |
+| 4 | Keys survive restart. Absent from `aether-config.json`. Env override still wins. |
+| 5 | First-run onboarding completes once and is re-openable. |
+| 6 | Tray Quit works. Dock mic matches PTT listening UX. |
+| 7 | Connect success and failure are visible. Tool call runs for one toolkit. |
+| 8 | Packaged app bootstraps voice with no system Python. |
+| 9 | NSIS install + uninstall. App launches from Start Menu. |
+| 10 | Tag builds Release asset on Actions. |
+| 11 | README-only install path works. |
 
 ## Release candidate checklist
 

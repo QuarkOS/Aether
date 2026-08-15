@@ -1,4 +1,4 @@
-# Phase 5. Overlay and tray UX
+# Phase 6. Overlay and tray UX
 
 Back to [overview](overview.md).
 

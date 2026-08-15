@@ -1,4 +1,4 @@
-# Phase 7. Voice runtime for packaged Windows
+# Phase 8. Voice runtime for packaged Windows
 
 Back to [overview](overview.md).
 

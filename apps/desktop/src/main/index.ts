@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 import { broadcast } from "./controller.js";
 import { registerPushToTalk, unregisterAll } from "./hotkeys.js";
 import { registerIpc } from "./ipc.js";
+import { stopLocalLlm } from "./localLlm/status.js";
 import { createTray, rebuildMenu } from "./tray.js";
 import { ensureVoiceService, stopVoiceService, waitForVoiceReady } from "./voiceService.js";
 import { createOverlayWindow, getOverlayWindow } from "./windows.js";
@@ -15,6 +16,7 @@ function doQuit(): void {
   quitting = true;
   unregisterAll();
   stopVoiceService();
+  void stopLocalLlm();
   app.quit();
 }
 
@@ -89,5 +91,6 @@ if (!gotLock) {
   app.on("before-quit", () => {
     quitting = true;
     stopVoiceService();
+    void stopLocalLlm();
   });
 }
