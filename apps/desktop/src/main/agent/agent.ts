@@ -19,6 +19,9 @@ function pushHistory(role: "user" | "assistant", content: string): void {
 
 function hasLlm(config: AppConfig): boolean {
   if (config.llm.provider === "none") return false;
+  if (config.llm.provider === "openai-compatible") {
+    return Boolean(config.llm.baseUrl.trim());
+  }
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
@@ -47,11 +50,21 @@ export async function runAgentTurn(
 
   try {
     const { streamText } = await import("ai");
-    const { openai } = await import("@ai-sdk/openai");
+    const { createOpenAI } = await import("@ai-sdk/openai");
     const tools = await getComposioTools(config);
 
+    const compatible = config.llm.provider === "openai-compatible";
+    const baseURL = compatible ? config.llm.baseUrl.trim() : undefined;
+    const apiKey = process.env.OPENAI_API_KEY || (compatible ? "local" : undefined);
+    const client = createOpenAI({
+      ...(baseURL ? { baseURL } : {}),
+      ...(apiKey ? { apiKey } : {}),
+    });
+    const modelId = config.llm.model || (compatible ? "llama3.2" : "gpt-4o-mini");
+    const model = compatible ? client.chat(modelId) : client(modelId);
+
     const result = streamText({
-      model: openai(config.llm.model || "gpt-4o-mini"),
+      model,
       system: SYSTEM_PROMPT,
       messages: history.map((m) => ({ role: m.role, content: m.content })),
       tools,

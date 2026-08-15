@@ -1,4 +1,4 @@
-# Phase 5. Composio status
+# Phase 6. Composio status
 
 Back to [overview](overview.md).
 

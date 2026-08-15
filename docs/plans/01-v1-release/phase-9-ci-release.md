@@ -1,4 +1,4 @@
-# Phase 8. CI and GitHub Release
+# Phase 9. CI and GitHub Release
 
 Back to [overview](overview.md).
 

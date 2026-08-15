@@ -5,9 +5,11 @@ import { DEFAULT_CONFIG } from "@aether/shared";
 import "./settings.css";
 
 function parseLlmProvider(value: string): AppConfig["llm"]["provider"] | undefined {
-  if (value === "openai" || value === "none") return value;
+  if (value === "openai" || value === "openai-compatible" || value === "none") return value;
   return undefined;
 }
+
+const DEFAULT_COMPAT_BASE_URL = "http://127.0.0.1:11434/v1";
 
 export function SettingsApp() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
@@ -64,10 +66,15 @@ export function SettingsApp() {
             onChange={(e) => {
               const provider = parseLlmProvider(e.target.value);
               if (!provider) return;
-              void patch({ llm: { ...config.llm, provider } });
+              const next = { ...config.llm, provider };
+              if (provider === "openai-compatible" && !next.baseUrl.trim()) {
+                next.baseUrl = DEFAULT_COMPAT_BASE_URL;
+              }
+              void patch({ llm: next });
             }}
           >
             <option value="openai">OpenAI</option>
+            <option value="openai-compatible">OpenAI-compatible (local)</option>
             <option value="none">None (offline replies)</option>
           </select>
         </div>
@@ -75,8 +82,20 @@ export function SettingsApp() {
           <label>Model</label>
           <input value={config.llm.model} onChange={(e) => patch({ llm: { ...config.llm, model: e.target.value } })} />
         </div>
+        {config.llm.provider === "openai-compatible" && (
+          <div className="row">
+            <label>Base URL</label>
+            <input
+              value={config.llm.baseUrl}
+              placeholder={DEFAULT_COMPAT_BASE_URL}
+              onChange={(e) => patch({ llm: { ...config.llm, baseUrl: e.target.value } })}
+            />
+          </div>
+        )}
         <p className="hint">
-          API keys are read from the environment (<code>OPENAI_API_KEY</code>) and are never stored in this config file.
+          {config.llm.provider === "openai-compatible"
+            ? "Point at Ollama, LM Studio, llama.cpp, or any OpenAI-compatible /v1 server. No cloud API key required."
+            : <>API keys are read from the environment (<code>OPENAI_API_KEY</code>) and are never stored in this config file.</>}
         </p>
       </section>
 

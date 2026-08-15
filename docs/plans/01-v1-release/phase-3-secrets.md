@@ -1,4 +1,4 @@
-# Phase 2. Secrets
+# Phase 3. Secrets
 
 Back to [overview](overview.md).
 
