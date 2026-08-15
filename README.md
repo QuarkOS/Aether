@@ -1,66 +1,67 @@
 # Aether
 
-Aether is a desktop AI companion. The mascot **Alya** lives in the corner of your
-screen (or hides in the tray), listens to voice commands, drives an LLM agent with
-real app integrations via [Composio](https://composio.dev), and replies in Alya's
-voice using an edge-tts → RVC voice pipeline.
+Desktop AI companion with the **Alya** mascot. Overlay on your screen, voice in and out, optional Composio app tools, and an OpenAI or local OpenAI-compatible brain.
 
-## Features
+## Install (Windows)
 
-- Transparent, always-on-top, click-through mascot overlay (Electron) with a tray/background mode.
-- Built-in high-quality anime Alya mascot (transparent, head-and-shoulders portrait) with per-emotion expressions and a two-frame mouth flap for lip-sync; optionally point it at a Live2D `.model3.json` in Settings to use `pixi-live2d-display` instead.
-- Voice in: push-to-talk global hotkey → `faster-whisper` STT. Text input also works.
-- Voice out: `edge-tts` base speech re-timbred to Alya with RVC v2 (`rvc-python`).
-- Agent brain: OpenAI, any OpenAI-compatible local server (Ollama, LM Studio, llama.cpp), or None for offline replies. On Windows, Settings can download Qwen3.5-9B ultra-uncensored heretic and start llama.cpp for you (~5.6 GB).
-- App integrations: connect Gmail, Google Calendar, GitHub, Slack, Notion, and more through Composio.
+1. Open the latest [GitHub Release](https://github.com/QuarkOS/Aether/releases).
+2. Download `Aether-Setup-*.exe` and run it.
+3. The build is unsigned. If SmartScreen warns, choose More info, then Run anyway.
+4. Complete onboarding in Settings (API keys are optional; offline replies work without them).
 
-## Architecture
+First voice use downloads embeddable Python and ffmpeg into your user data folder. Optional local Heretic model download is ~5.6 GB and also lands in user data, not in the installer.
 
-- `apps/desktop` — Electron + Vite + React. Main process hosts the agent (LLM + Composio) and orchestration; the renderer draws the mascot, captures the mic, and plays/lip-syncs audio.
-- `services/voice` — Python FastAPI sidecar for STT + edge-tts + RVC. Launched automatically by the desktop app.
-- `packages/shared` — shared TypeScript contracts (config, agent events, IPC).
+Uninstall from Windows Settings removes the app. `%APPDATA%\Aether` may keep config, keys, and downloaded runtimes.
 
-## Requirements
+See [PRIVACY.md](PRIVACY.md) for what leaves the machine. License is [MIT](LICENSE).
 
-- Node.js >= 20, npm >= 10
-- Python >= 3.10 with `ffmpeg` on PATH
-- Optional: an NVIDIA (CUDA) or Apple Silicon (MPS) GPU for low-latency Alya voice (RVC)
+## What V1 includes
 
-## Getting started
+- Transparent overlay + tray, PNG Alya expressions, dock text and mic
+- Push-to-talk (global hotkey or dock mic) → local faster-whisper STT
+- Speech via edge-tts (network). RVC Alya timbre exists in source but is off by default and not part of the installer ML path
+- LLM: OpenAI, OpenAI-compatible base URL, or None. Windows Settings can install llama.cpp and Qwen3.5-9B ultra-uncensored heretic
+- Composio toolkit connect with live status when you set a Composio key
+- Secrets stored with OS encryption in Settings (env vars still override)
+
+## What V1 does not ship
+
+- Signed installer / auto-update
+- macOS or Linux Release artifacts
+- Bundled GGUF weights or torch/RVC in the NSIS payload
+- Live2D as the default mascot (optional path remains in Settings)
+
+## Develop from source
+
+Needs Node.js >= 20 and, for local voice without the packaged bootstrap, Python >= 3.10 plus ffmpeg on PATH.
 
 ```bash
 npm install
+npm run build --workspace @aether/shared
 
-# Voice service deps (base is enough to run; ML extras add the Alya RVC voice)
-python3 -m venv services/voice/.venv
-. services/voice/.venv/bin/activate
+python -m venv services/voice/.venv
+services\voice\.venv\Scripts\activate
 pip install -r services/voice/requirements.txt
-# Optional, GPU recommended:
-# pip install -r services/voice/requirements-ml.txt
 deactivate
 
-npm run dev   # launches the Electron app; it starts the voice sidecar automatically
+npm run dev
 ```
 
-Set API keys as environment variables before launching (never stored in config):
+Keys can live in Settings or in the environment (`OPENAI_API_KEY`, `COMPOSIO_API_KEY`).
 
-```bash
-export OPENAI_API_KEY=...      # assistant brain (or set provider to "none")
-export COMPOSIO_API_KEY=...    # app integrations
-```
+### Scripts
 
-## Scripts
+- `npm run dev` — Electron app (starts the voice sidecar)
+- `npm run build` — shared + desktop build
+- `npm run typecheck` / `npm run lint`
+- `npm run package:win` — Windows NSIS installer under `apps/desktop/release/`
 
-- `npm run dev` — run the desktop app (spawns the Python voice service).
-- `npm run dev:voice` — run only the voice service.
-- `npm run build` — type-check + build shared package and the Electron app.
-- `npm run typecheck` — type-check all TypeScript.
-- `npm run lint` — lint the repo.
-- `npm run package --workspace @aether/desktop` — build installers (electron-builder).
+Packaging smoke checklist: [docs/plans/01-v1-release/packaging-smoke.md](docs/plans/01-v1-release/packaging-smoke.md).
 
-## Configuration
+## Architecture
 
-Open **Settings** from the mascot dock or tray to choose the LLM provider/model,
-base TTS voice, RVC model + pitch, push-to-talk hotkey, Whisper size, mascot model
-(`placeholder` or a Live2D `.model3.json` path/URL), overlay corner, click-through,
-and to connect Composio app integrations.
+- `apps/desktop` — Electron + Vite + React. Main process runs the agent; renderer draws Alya and plays audio.
+- `services/voice` — Python FastAPI sidecar for STT and TTS.
+- `packages/shared` — shared TypeScript contracts.
+
+V1 release plan: [docs/plans/01-v1-release/overview.md](docs/plans/01-v1-release/overview.md).

@@ -3,10 +3,16 @@
 Aether is a desktop AI companion (mascot "Alya") with three parts:
 
 - `apps/desktop` — Electron + Vite + React (via `electron-vite`). The main process runs the agent (LLM + Composio) and orchestration; the renderer draws the mascot, captures the mic, and plays/lip-syncs audio.
-- `services/voice` — Python FastAPI sidecar: `faster-whisper` STT, `edge-tts` TTS, optional `rvc-python` for the Alya voice. The desktop app spawns it automatically (and reuses one that's already running on the port).
-- `packages/shared` — shared TypeScript contracts. It must be built (`npm run build --workspace @aether/shared`) before typechecking/running the desktop app, because the main process bundles from its `dist`.
+- `services/voice` — Python FastAPI sidecar: `faster-whisper` STT, `edge-tts` TTS, optional `rvc-python` for the Alya voice. Packaged Windows builds bootstrap embeddable Python + ffmpeg under userData. Dev builds prefer `services/voice/.venv`.
+- `packages/shared` — shared TypeScript contracts. Build it (`npm run build --workspace @aether/shared`) before typechecking or running the desktop app.
 
-Standard commands live in `README.md` and `package.json` scripts (`dev`, `build`, `typecheck`, `lint`) and `services/voice/README.md`. Prefer those.
+Standard commands live in `README.md` and root `package.json` (`dev`, `build`, `typecheck`, `lint`, `package:win`). Prefer those.
+
+V1 release work is planned under `docs/plans/01-v1-release/`. Windows public artifacts come from the NSIS path (`npm run package:win` and `.github/workflows/release-windows.yml`).
+
+## Secrets
+
+Settings can store OpenAI and Composio keys with Electron `safeStorage`. Environment variables still win when set: `OPENAI_API_KEY`, `COMPOSIO_API_KEY`. Never commit keys into config JSON.
 
 ## Cursor Cloud specific instructions
 
@@ -17,4 +23,3 @@ Standard commands live in `README.md` and `package.json` scripts (`dev`, `build`
 - The cloud VM has no audio output device, so `HTMLAudioElement` playback is silent and its `ended` event is unreliable. Lip-sync is therefore driven by the clip's decoded duration (parsed from the WAV header in `controller.ts`), not by audio playback events. Keep it that way.
 - The overlay is an always-on-top window that never holds focus, so it must keep `webPreferences.backgroundThrottling: false`; otherwise Chromium throttles `requestAnimationFrame`/timers and the mascot's lip-sync, blink, and idle bob freeze.
 - The global push-to-talk hotkey (`CommandOrControl+Shift+Space`) often fails to register under the VNC window manager (`[hotkeys] failed to register`); this is environment-specific. Use the dock's mic button or type in the dock to exercise the same STT/agent path.
-- Secrets are read from env vars, never stored in config: `OPENAI_API_KEY` (assistant brain; without it the app uses an offline rule-based reply so the voice + mascot pipeline still works) and `COMPOSIO_API_KEY` (app integrations / Connect flow).
