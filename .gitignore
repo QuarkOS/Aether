@@ -8,6 +8,7 @@ __pycache__/
 dist/
 out/
 build/
+apps/desktop/release/
 *.tsbuildinfo
 
 # Downloaded models / runtime data (large binaries)
