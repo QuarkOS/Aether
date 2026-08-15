@@ -1,6 +1,6 @@
 {
   "name": "@aether/desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Aether desktop companion (Electron overlay + Alya mascot).",
   "main": "./out/main/index.js",
@@ -41,7 +41,7 @@
     "productName": "Aether",
     "copyright": "Copyright © 2026 QuarkOS / Aether contributors",
     "directories": {
-      "buildResources": "build",
+      "buildResources": "resources",
       "output": "release"
     },
     "files": [
@@ -65,7 +65,7 @@
     ],
     "win": {
       "target": ["nsis"],
-      "icon": "build/icon.png",
+      "icon": "resources/app-icon.png",
       "artifactName": "Aether-Setup-${version}.${ext}",
       "signAndEditExecutable": false
     },
