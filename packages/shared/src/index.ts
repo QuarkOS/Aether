@@ -66,8 +66,10 @@ export interface Viseme {
 /** Persisted user configuration (stored by the main process). */
 export interface AppConfig {
   llm: {
-    provider: "openai" | "none";
+    provider: "openai" | "openai-compatible" | "none";
     model: string;
+    /** OpenAI-compatible API root (e.g. http://127.0.0.1:11434/v1). Empty for cloud OpenAI. */
+    baseUrl: string;
   };
   voice: {
     /** edge-tts base voice used before RVC re-timbre. */
@@ -104,7 +106,7 @@ export interface AppConfig {
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
-  llm: { provider: "openai", model: "gpt-4o-mini" },
+  llm: { provider: "openai", model: "gpt-4o-mini", baseUrl: "" },
   voice: {
     ttsVoice: "en-US-AriaNeural",
     rvcEnabled: false,

@@ -1,4 +1,4 @@
-# Phase 7. Windows installer
+# Phase 8. Windows installer
 
 Back to [overview](overview.md).
 
