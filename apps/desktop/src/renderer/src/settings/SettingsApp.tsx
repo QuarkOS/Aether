@@ -3,6 +3,7 @@ import type {
   AppConfig,
   IntegrationToolkitStatus,
   LocalLlmStatus,
+  RvcInstallStatus,
   SecretsStatus,
   VoiceHealth,
 } from "@aether/shared";
@@ -64,11 +65,37 @@ function localLlmLabel(status: LocalLlmStatus): string {
   }
 }
 
+function rvcInstallLabel(status: RvcInstallStatus): string {
+  switch (status.state) {
+    case "missing":
+      return status.message ?? "Not installed";
+    case "downloading":
+    case "installing": {
+      const pct = status.progress != null ? ` ${Math.round(status.progress * 100)}%` : "";
+      return (status.message ?? status.state) + pct;
+    }
+    case "ready":
+      return status.message ?? `Ready (${status.device ?? "cpu"})`;
+    case "error":
+      return status.message ?? "Failed";
+    default: {
+      const _exhaustive: never = status.state;
+      return _exhaustive;
+    }
+  }
+}
+
 export function SettingsApp() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [health, setHealth] = useState<VoiceHealth | null>(null);
   const [localLlm, setLocalLlm] = useState<LocalLlmStatus>({ state: "missing" });
   const [localLlmBusy, setLocalLlmBusy] = useState(false);
+  const [rvcInstall, setRvcInstall] = useState<RvcInstallStatus>({
+    state: "missing",
+    rvcAvailable: false,
+    modelReady: false,
+  });
+  const [rvcBusy, setRvcBusy] = useState(false);
   const [secrets, setSecrets] = useState<SecretsStatus>(EMPTY_SECRETS);
   const [openaiDraft, setOpenaiDraft] = useState("");
   const [composioDraft, setComposioDraft] = useState("");
@@ -85,6 +112,7 @@ export function SettingsApp() {
     });
     void window.aether.getVoiceHealth().then(setHealth);
     void window.aether.getLocalLlmStatus().then(setLocalLlm);
+    void window.aether.getRvcInstallStatus().then(setRvcInstall);
     void window.aether.getSecretsStatus().then(setSecrets);
     void window.aether.listToolkits().then(setToolkits);
     void window.aether.listIntegrationStatus().then(setIntegrationStatus);
@@ -109,6 +137,22 @@ export function SettingsApp() {
     }, fast ? 400 : 2500);
     return () => window.clearInterval(interval);
   }, [localLlm.state]);
+
+  useEffect(() => {
+    const fast = rvcInstall.state === "downloading" || rvcInstall.state === "installing";
+    const tick = async () => {
+      const next = await window.aether.getRvcInstallStatus();
+      setRvcInstall(next);
+      if (next.state === "ready") {
+        setConfig(await window.aether.getConfig());
+        setHealth(await window.aether.getVoiceHealth());
+      }
+    };
+    const interval = window.setInterval(() => {
+      void tick();
+    }, fast ? 500 : 3000);
+    return () => window.clearInterval(interval);
+  }, [rvcInstall.state]);
 
   const patch = async (p: Partial<AppConfig>) => {
     const next = await window.aether.setConfig(p);
@@ -150,6 +194,21 @@ export function SettingsApp() {
       setConfig(await window.aether.getConfig());
     } finally {
       setLocalLlmBusy(false);
+    }
+  };
+
+  const runRvcInstall = async () => {
+    setRvcBusy(true);
+    setNotice(null);
+    try {
+      const next = await window.aether.installRvc();
+      setRvcInstall(next);
+      setConfig(await window.aether.getConfig());
+      setHealth(await window.aether.getVoiceHealth());
+      if (next.state === "ready") setNotice("Alya RVC installed. Spoken replies will use her voice.");
+      else if (next.state === "error") setNotice(next.message ?? "RVC install failed.");
+    } finally {
+      setRvcBusy(false);
     }
   };
 
@@ -285,7 +344,7 @@ export function SettingsApp() {
         )}
         <p className="hint">
           {config.llm.provider === "openai-compatible"
-            ? "Point at Ollama, LM Studio, llama.cpp, or any OpenAI-compatible /v1 server. No cloud API key required."
+            ? "Point at Ollama, LM Studio, llama.cpp, or any OpenAI-compatible /v1 server. No cloud API key required. Local companion mode is on (less prudish refusals)."
             : config.llm.provider === "openai"
               ? <>Keys are stored with OS encryption, not in the config file. A process env <code>OPENAI_API_KEY</code> still wins when set.</>
               : "Offline rule-based replies only."}
@@ -311,8 +370,9 @@ export function SettingsApp() {
           </div>
           <p className="hint">
             About 5.6 GB download on Windows. This is Qwen3.5-9B ultra-uncensored heretic, an
-            abliterated model with fewer refusals. It still has to follow the law. Alya's persona
-            prompt stays. Text weights only, no mmproj.
+            abliterated model with fewer refusals. With provider set to OpenAI-compatible, Alya
+            uses a local companion persona (adult roleplay OK; illegal/harmful still refused).
+            Text weights only, no mmproj.
           </p>
         </div>
       </section>
@@ -327,9 +387,55 @@ export function SettingsApp() {
           <label>Alya voice (RVC)</label>
           <input type="checkbox" checked={config.voice.rvcEnabled} onChange={(e) => patch({ voice: { ...config.voice, rvcEnabled: e.target.checked } })} />
         </div>
+        <div className="row">
+          <label>Voice mode</label>
+          <select
+            value={config.voice.voiceMode ?? "quality"}
+            disabled={!config.voice.rvcEnabled}
+            onChange={(e) =>
+              patch({
+                voice: {
+                  ...config.voice,
+                  voiceMode: e.target.value === "fast" ? "fast" : "quality",
+                },
+              })
+            }
+          >
+            <option value="quality">Quality (fuller Alya timbre)</option>
+            <option value="fast">Fast (snappier RVC)</option>
+          </select>
+        </div>
         <p className="hint">
-          RVC is off by default. It needs the optional ML extras (<code>requirements-ml.txt</code>) and a GPU. If
-          health below says RVC unavailable, the base TTS voice is used instead.
+          Fast uses a lighter RVC mix (index 0) so replies start sooner; Quality keeps richer
+          Alya color. Takes effect on the next spoken line — no restart needed.
+        </p>
+        <div className="local-llm-box">
+          <div className="row">
+            <label>RVC setup</label>
+            <span>{rvcInstallLabel(rvcInstall)}</span>
+          </div>
+          <div className="local-llm-actions">
+            <button
+              type="button"
+              disabled={
+                rvcBusy ||
+                rvcInstall.state === "downloading" ||
+                rvcInstall.state === "installing" ||
+                rvcInstall.state === "ready"
+              }
+              onClick={() => void runRvcInstall()}
+            >
+              {rvcInstall.state === "ready" ? "Installed" : "Set up Alya voice"}
+            </button>
+          </div>
+          <p className="hint">
+            Windows only. Installs portable Python 3.10 (with build headers), torch (CUDA if
+            nvidia-smi works, otherwise CPU), rvc-python, and the Alya model. First setup can
+            take a long time and several GB of disk.
+          </p>
+        </div>
+        <p className="hint">
+          If health below says RVC unavailable, spoken audio stays on the base Microsoft TTS voice.
         </p>
         <div className="row">
           <label>RVC model</label>
@@ -346,6 +452,14 @@ export function SettingsApp() {
               <li>Device: <b>{health.device}</b></li>
               <li>TTS: {health.ttsAvailable ? "ready" : "unavailable"}</li>
               <li>STT: {health.sttAvailable ? "ready" : "unavailable"}</li>
+              <li>
+                Warmup:{" "}
+                {health.warmReady
+                  ? `ready (whisper-${health.sttModel ?? "?"}${health.rvcWarmed ? ", rvc" : ""})`
+                  : health.warmReady === false
+                    ? "loading models…"
+                    : "unknown"}
+              </li>
               <li>RVC: {health.rvcAvailable ? (health.rvcModelLoaded ? "ready (model loaded)" : "ready (no model)") : "unavailable"}</li>
               <li>Models: {health.models.join(", ") || "none installed"}</li>
             </ul>
@@ -369,6 +483,50 @@ export function SettingsApp() {
             ))}
           </select>
         </div>
+        <p className="hint">
+          Prefer <code>small</code> (default) for accuracy. Existing installs on{" "}
+          <code>base</code> are migrated to <code>small</code> so warmup matches the mic path.
+          Restart the app after changing this so the voice sidecar reloads the same size.
+        </p>
+        <div className="row">
+          <label>Wake word</label>
+          <input
+            type="checkbox"
+            checked={config.input.wakeWordEnabled}
+            onChange={(e) =>
+              patch({ input: { ...config.input, wakeWordEnabled: e.target.checked } })
+            }
+          />
+        </div>
+        <div className="row">
+          <label>Wake phrase</label>
+          <input
+            value={config.input.wakePhrase}
+            disabled={!config.input.wakeWordEnabled}
+            onChange={(e) => patch({ input: { ...config.input, wakePhrase: e.target.value } })}
+            placeholder="alya"
+          />
+        </div>
+        <p className="hint">
+          When enabled, the overlay listens for the phrase (e.g. &quot;Alya&quot; or &quot;Hey Alya,
+          what&apos;s up?&quot;). Uses the same Whisper model — keep the app unmuted and allow mic
+          access. Push-to-talk still works.
+        </p>
+        <div className="row">
+          <label>Barge-in</label>
+          <input
+            type="checkbox"
+            checked={config.input.bargeInEnabled ?? true}
+            onChange={(e) =>
+              patch({ input: { ...config.input, bargeInEnabled: e.target.checked } })
+            }
+          />
+        </div>
+        <p className="hint">
+          Listen while Alya speaks: if you talk over her, playback stops and a new mic turn
+          starts. Uses energy detection (raise your voice slightly if speakers echo into the mic).
+          Push-to-talk also interrupts. Default on.
+        </p>
       </section>
 
       <section className="card">

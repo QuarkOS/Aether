@@ -80,6 +80,9 @@ export async function startServer(opts: {
     "-ngl",
     ngl,
     "--jinja",
+    // Qwen3.5 defaults to long hidden reasoning; that fills -c and yields empty speakable text.
+    "--reasoning",
+    "off",
   ];
   console.log(`[local-llm] starting: ${exe} ${args.join(" ")}`);
   const proc = spawn(exe, args, {

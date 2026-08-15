@@ -1,11 +1,20 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { app } from "electron";
 import type { SpeakRequest, VoiceHealth } from "@aether/shared";
 
-import { ensurePackagedVoiceRuntime, getVoiceBootstrap } from "./voiceRuntime/ensure.js";
+import { loadConfig } from "./config.js";
+import {
+  ensureWindowsVoiceRuntime,
+  getVoiceBootstrap,
+  resolvePreferredRuntime,
+  shouldPreferRuntimePython,
+} from "./voiceRuntime/ensure.js";
+
+const execFileAsync = promisify(execFile);
 
 const PORT = Number(process.env.AETHER_VOICE_PORT ?? 8760);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -14,7 +23,7 @@ let child: ChildProcess | null = null;
 let ready = false;
 let starting: Promise<void> | null = null;
 
-function voiceDir(): string {
+export function getVoiceDir(): string {
   const packaged = join(process.resourcesPath ?? "", "voice");
   if (app.isPackaged && existsSync(packaged)) return packaged;
   return join(app.getAppPath(), "..", "..", "services", "voice");
@@ -33,6 +42,11 @@ function pythonExecutable(dir: string): string {
 export async function ensureVoiceService(): Promise<void> {
   const existing = await getHealth();
   if (existing?.ok) {
+    if (existing.warmReady === false) {
+      console.log("[voice] sidecar up; waiting for model warmup…");
+      await waitForVoiceReady(180_000);
+      return;
+    }
     ready = true;
     console.log("[voice] reusing already-running voice service.");
     return;
@@ -47,7 +61,7 @@ export async function ensureVoiceService(): Promise<void> {
 
 export async function startVoiceService(): Promise<void> {
   if (child) return;
-  const dir = voiceDir();
+  const dir = getVoiceDir();
   const runner = join(dir, "run.py");
   if (!existsSync(runner)) {
     console.error(`[voice] run.py not found at ${runner}; voice features disabled.`);
@@ -56,18 +70,27 @@ export async function startVoiceService(): Promise<void> {
 
   let python = pythonExecutable(dir);
   let pathEnv = process.env.PATH ?? "";
-  if (app.isPackaged && process.platform === "win32") {
+  const useRuntime =
+    process.platform === "win32" && (app.isPackaged || shouldPreferRuntimePython());
+  if (useRuntime) {
     try {
-      const runtime = await ensurePackagedVoiceRuntime(dir);
-      python = runtime.python;
-      pathEnv = `${runtime.pathPrefix};${pathEnv}`;
+      const preferred = resolvePreferredRuntime();
+      if (preferred) {
+        python = preferred.python;
+        pathEnv = `${preferred.pathPrefix};${pathEnv}`;
+      } else if (app.isPackaged) {
+        const runtime = await ensureWindowsVoiceRuntime(dir);
+        python = runtime.python;
+        pathEnv = `${runtime.pathPrefix};${pathEnv}`;
+      }
     } catch (err) {
-      console.error("[voice] packaged runtime bootstrap failed:", err);
-      return;
+      console.error("[voice] Windows runtime bootstrap failed:", err);
+      if (app.isPackaged) return;
     }
   }
 
-  console.log(`[voice] starting: ${python} ${runner} (port ${PORT})`);
+  const sttModel = loadConfig().input.sttModel || "small";
+  console.log(`[voice] starting: ${python} ${runner} (port ${PORT}, stt=${sttModel})`);
   child = spawn(python, [runner], {
     cwd: dir,
     env: {
@@ -75,6 +98,7 @@ export async function startVoiceService(): Promise<void> {
       PATH: pathEnv,
       AETHER_VOICE_PORT: String(PORT),
       AETHER_MODELS_DIR: join(app.getPath("userData"), "voice-models"),
+      AETHER_STT_MODEL: sttModel,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -95,18 +119,63 @@ export function stopVoiceService(): void {
   }
 }
 
+/** Best-effort free of the voice port (dev often leaves a prior sidecar running). */
+export async function freeVoicePort(): Promise<void> {
+  if (process.platform !== "win32") return;
+  try {
+    const { stdout } = await execFileAsync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-Command",
+        `Get-NetTCPConnection -LocalPort ${PORT} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique`,
+      ],
+      { windowsHide: true, timeout: 10_000 },
+    );
+    const pids = stdout
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter((s) => /^\d+$/.test(s) && s !== "0");
+    for (const pid of pids) {
+      try {
+        await execFileAsync("taskkill", ["/PID", pid, "/F"], { windowsHide: true, timeout: 10_000 });
+        console.log(`[voice] killed pid ${pid} on port ${PORT}`);
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Stop any sidecar on the port and start with the preferred runtime. */
+export async function restartVoiceService(): Promise<boolean> {
+  stopVoiceService();
+  await freeVoicePort();
+  await startVoiceService();
+  return waitForVoiceReady(180_000);
+}
+
 async function tryFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${BASE_URL}${path}`, init);
 }
 
-export async function waitForVoiceReady(timeoutMs = 120_000): Promise<boolean> {
+export async function waitForVoiceReady(timeoutMs = 180_000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
       const res = await tryFetch("/health");
       if (res.ok) {
-        ready = true;
-        return true;
+        const body = (await res.json()) as VoiceHealth;
+        // Prefer warmReady when the sidecar reports it; older builds only had ok.
+        if (body.warmReady === undefined || body.warmReady) {
+          ready = true;
+          if (body.sttModel) {
+            console.log(`[voice] ready (warm stt=${body.sttModel} rvc=${body.rvcWarmed ?? "?"})`);
+          }
+          return true;
+        }
       }
     } catch {
       // not up yet

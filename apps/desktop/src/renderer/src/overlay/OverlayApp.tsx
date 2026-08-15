@@ -4,8 +4,10 @@ import { DEFAULT_CONFIG } from "@aether/shared";
 
 import { Mascot } from "./Mascot";
 import { useAudioPlayback } from "./useAudioPlayback";
+import { useBargeIn } from "./useBargeIn";
 import { useClickThrough } from "./useClickThrough";
 import { useRecorder } from "./useRecorder";
+import { useWakeWord } from "./useWakeWord";
 import "./overlay.css";
 
 const MODEL_URLS: Record<string, string | null> = {
@@ -28,9 +30,13 @@ export function OverlayApp() {
   const [userText, setUserText] = useState<string>("");
   const [inputText, setInputText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [timingLabel, setTimingLabel] = useState<string | null>(null);
   const streamingRef = useRef("");
+  const timingClearRef = useRef<number | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-  const { ampRef, play } = useAudioPlayback();
+  const { ampRef, play, stop: stopAudio } = useAudioPlayback();
   const speakRafRef = useRef<number | null>(null);
   const speakTimerRef = useRef<number | null>(null);
   const { recording, start, stop } = useRecorder((wav) => {
@@ -42,9 +48,9 @@ export function OverlayApp() {
     if (speakTimerRef.current) window.clearTimeout(speakTimerRef.current);
     speakRafRef.current = null;
     speakTimerRef.current = null;
+    stopAudio();
     setMouthOpen(0);
-    setState("idle");
-  }, []);
+  }, [stopAudio]);
 
   const beginSpeaking = useCallback(
     (url: string, durationMs: number) => {
@@ -63,10 +69,45 @@ export function OverlayApp() {
       };
       speakRafRef.current = requestAnimationFrame(loop);
       // Clip length is the source of truth for how long the mouth animates.
-      speakTimerRef.current = window.setTimeout(stopSpeaking, Math.max(800, durationMs));
+      speakTimerRef.current = window.setTimeout(() => {
+        stopSpeaking();
+        setState((s) => (s === "speaking" ? "idle" : s));
+      }, Math.max(800, durationMs));
     },
     [ampRef, play, stopSpeaking],
   );
+
+  const startMicCapture = useCallback(async () => {
+    try {
+      await window.aether.startListening();
+      await start();
+    } catch (err) {
+      setError(`Microphone unavailable: ${String(err)}`);
+    }
+  }, [start]);
+
+  const handleBargeIn = useCallback(() => {
+    if (stateRef.current !== "speaking" && stateRef.current !== "thinking") return;
+    stopSpeaking();
+    setState("listening");
+    void window.aether.interrupt("barge-in");
+    void startMicCapture();
+  }, [startMicCapture, stopSpeaking]);
+
+  useWakeWord({
+    enabled: config.input.wakeWordEnabled,
+    // Barge-in owns duplex while speaking; wake stays paused for PTT / think / speak.
+    suspended: recording || state === "thinking" || state === "listening" || state === "speaking",
+    onUtterance: (wav) => {
+      void window.aether.submitWakeAudio(wav);
+    },
+  });
+
+  useBargeIn({
+    enabled: config.input.bargeInEnabled,
+    active: state === "speaking",
+    onInterrupt: handleBargeIn,
+  });
 
   useClickThrough(config.mascot.clickThrough);
 
@@ -97,35 +138,77 @@ export function OverlayApp() {
           setEmotion(event.emotion);
           beginSpeaking(event.url, event.durationMs);
           break;
+        case "audio-stop":
+        case "interrupted":
+          stopSpeaking();
+          if (event.type === "interrupted" && event.reason === "barge-in") {
+            setState("listening");
+          } else {
+            setState("idle");
+          }
+          break;
         case "error":
           setError(event.message);
           setTimeout(() => setError(null), 6000);
           break;
+        case "wake-armed":
+          setError(null);
+          void (async () => {
+            try {
+              if (recording) return;
+              await startMicCapture();
+            } catch (err) {
+              setError(`Microphone unavailable: ${String(err)}`);
+            }
+          })();
+          break;
+        case "turn-timing": {
+          const fmt = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`);
+          const bits = [
+            event.sttMs !== undefined ? `STT ${fmt(event.sttMs)}` : null,
+            `LLM ${fmt(event.llmMs)}`,
+            event.ttfaMs !== undefined ? `TTFA ${fmt(event.ttfaMs)}` : null,
+            `TTS ${fmt(event.ttsMs)}`,
+            `total ${fmt(event.totalMs)}`,
+            event.rvcRequested ? "RVC on" : "edge-tts",
+          ].filter(Boolean);
+          setTimingLabel(bits.join(" · "));
+          if (timingClearRef.current) window.clearTimeout(timingClearRef.current);
+          timingClearRef.current = window.setTimeout(() => setTimingLabel(null), 12000);
+          break;
+        }
         default:
           break;
       }
     });
     return off;
-  }, [beginSpeaking]);
+  }, [beginSpeaking, recording, startMicCapture, stopSpeaking]);
 
-  // Push-to-talk hotkey toggles recording.
+  // Reload config when settings may have changed (wake word toggle, etc.).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void window.aether.getConfig().then(setConfig);
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Push-to-talk hotkey toggles recording (interrupts speak first).
   useEffect(() => {
     const off = window.aether.onPushToTalk(() => {
       setError(null);
       void (async () => {
         if (recording) stop();
         else {
-          try {
-            await window.aether.startListening();
-            await start();
-          } catch (err) {
-            setError(`Microphone unavailable: ${String(err)}`);
+          if (stateRef.current === "speaking" || stateRef.current === "thinking") {
+            stopSpeaking();
+            await window.aether.interrupt("user");
           }
+          await startMicCapture();
         }
       })();
     });
     return off;
-  }, [recording, start, stop]);
+  }, [recording, startMicCapture, stop, stopSpeaking]);
 
   // Gaze follows the cursor across the screen.
   useEffect(() => {
@@ -166,6 +249,7 @@ export function OverlayApp() {
           </div>
         )}
         {statusLabel[state] && <div className="status-pill">{statusLabel[state]}</div>}
+        {timingLabel && <div className="status-pill status-pill--timing" data-interactive>{timingLabel}</div>}
         {error && <div className="status-pill status-pill--error" data-interactive>{error}</div>}
       </div>
 
@@ -187,12 +271,11 @@ export function OverlayApp() {
             void (async () => {
               if (recording) stop();
               else {
-                try {
-                  await window.aether.startListening();
-                  await start();
-                } catch (err) {
-                  setError(`Microphone unavailable: ${String(err)}`);
+                if (stateRef.current === "speaking" || stateRef.current === "thinking") {
+                  stopSpeaking();
+                  await window.aether.interrupt("user");
                 }
+                await startMicCapture();
               }
             })();
           }}

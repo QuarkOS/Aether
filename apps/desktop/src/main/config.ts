@@ -30,11 +30,38 @@ function deepMerge<T>(base: T, patch: Partial<T>): T {
 }
 
 function normalizeConfig(config: AppConfig): AppConfig {
-  const provider: string = config.llm.provider;
+  let next = config;
+  const provider: string = next.llm.provider;
   if (provider === "anthropic" || provider === "gemini") {
-    return { ...config, llm: { ...config.llm, provider: "openai" } };
+    next = { ...next, llm: { ...next.llm, provider: "openai" } };
   }
-  return config;
+  // Old installs defaulted to whisper-base while the sidecar warmed "small",
+  // causing a cold second load on the first mic turn. Prefer small unless the
+  // user has already picked tiny/medium/etc.
+  if (next.input.sttModel === "base") {
+    console.log("[config] migrating sttModel base → small (align with voice warmup)");
+    next = { ...next, input: { ...next.input, sttModel: "small" } };
+  }
+  if (typeof next.input.wakeWordEnabled !== "boolean") {
+    next = {
+      ...next,
+      input: {
+        ...next.input,
+        wakeWordEnabled: DEFAULT_CONFIG.input.wakeWordEnabled,
+        wakePhrase: next.input.wakePhrase || DEFAULT_CONFIG.input.wakePhrase,
+      },
+    };
+  }
+  if (!next.input.wakePhrase?.trim()) {
+    next = { ...next, input: { ...next.input, wakePhrase: DEFAULT_CONFIG.input.wakePhrase } };
+  }
+  if (typeof next.input.bargeInEnabled !== "boolean") {
+    next = { ...next, input: { ...next.input, bargeInEnabled: DEFAULT_CONFIG.input.bargeInEnabled } };
+  }
+  if (next.voice.voiceMode !== "quality" && next.voice.voiceMode !== "fast") {
+    next = { ...next, voice: { ...next.voice, voiceMode: DEFAULT_CONFIG.voice.voiceMode } };
+  }
+  return next;
 }
 
 export function loadConfig(): AppConfig {

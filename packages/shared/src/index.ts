@@ -53,7 +53,25 @@ export type AgentEvent =
   | { type: "tool-call"; tool: string; args: unknown }
   | { type: "tool-result"; tool: string; ok: boolean; summary: string }
   | { type: "audio"; url: string; emotion: Emotion; durationMs: number; visemes?: Viseme[] }
-  | { type: "error"; message: string };
+  | {
+      type: "turn-timing";
+      /** Whisper STT only; omitted for typed turns. */
+      sttMs?: number;
+      llmMs: number;
+      ttsMs: number;
+      /** Wall time from turn start until first audio clip was emitted. */
+      ttfaMs?: number;
+      totalMs: number;
+      /** Config asked for RVC; false means base edge-tts only. */
+      rvcRequested: boolean;
+    }
+  | { type: "error"; message: string }
+  /** Wake phrase heard; overlay should open a short command capture window. */
+  | { type: "wake-armed" }
+  /** Stop TTS playback and clear the speak queue (barge-in / cancel). */
+  | { type: "audio-stop" }
+  /** User interrupted the assistant; overlay should stop audio and may listen. */
+  | { type: "interrupted"; reason: "barge-in" | "user" | "new-turn" };
 
 /** Simple time-stamped mouth-open value for lip-sync when phonemes are unavailable. */
 export interface Viseme {
@@ -80,12 +98,26 @@ export interface AppConfig {
     rvcPitch: number;
     /** RVC model name (directory under the voice service models dir). */
     rvcModel: string;
+    /**
+     * quality = fuller Alya timbre (index mix); fast = snappier RVC (index 0).
+     * Only matters when rvcEnabled is true.
+     */
+    voiceMode: "quality" | "fast";
   };
   input: {
     /** Global push-to-talk accelerator (Electron accelerator syntax). */
     pushToTalkHotkey: string;
     /** faster-whisper model size. */
     sttModel: string;
+    /** Continuous mic listen for the wake phrase (energy + STT keyword gate). */
+    wakeWordEnabled: boolean;
+    /** Phrase that arms listening / starts a turn (case-insensitive). */
+    wakePhrase: string;
+    /**
+     * Listen while Alya speaks: energy/VAD barge-in stops TTS, clears the speak
+     * queue, and aborts the in-flight LLM stream so a new turn can start.
+     */
+    bargeInEnabled: boolean;
   };
   mascot: {
     /** Model directory name under resources/models. */
@@ -114,10 +146,14 @@ export const DEFAULT_CONFIG: AppConfig = {
     rvcEnabled: false,
     rvcPitch: 0,
     rvcModel: "alya",
+    voiceMode: "quality",
   },
   input: {
     pushToTalkHotkey: "CommandOrControl+Shift+Space",
-    sttModel: "base",
+    sttModel: "small",
+    wakeWordEnabled: false,
+    wakePhrase: "alya",
+    bargeInEnabled: true,
   },
   mascot: {
     model: "placeholder",
@@ -139,6 +175,14 @@ export interface VoiceHealth {
   rvcAvailable: boolean;
   rvcModelLoaded: boolean;
   models: string[];
+  /** Startup STT+RVC warmup finished (or timed out). */
+  warmReady?: boolean;
+  sttWarmed?: boolean;
+  rvcWarmed?: boolean;
+  /** Whisper size the sidecar warmed / will keep loaded. */
+  sttModel?: string | null;
+  warmError?: string | null;
+  bootstrap?: string;
 }
 
 /** Request body for POST /speak on the voice service. */
@@ -148,6 +192,8 @@ export interface SpeakRequest {
   rvc?: boolean;
   model?: string;
   pitch?: number;
+  /** quality (default) or fast RVC params. */
+  mode?: "quality" | "fast";
 }
 
 /** Live status for one Composio toolkit (not persisted). */
@@ -171,6 +217,18 @@ export interface LocalLlmStatus {
   backend?: "vulkan" | "cpu";
 }
 
+export type RvcInstallState = "missing" | "downloading" | "installing" | "ready" | "error";
+
+/** Managed Alya RVC (torch + rvc-python + model) install progress. */
+export interface RvcInstallStatus {
+  state: RvcInstallState;
+  progress?: number;
+  message?: string;
+  rvcAvailable: boolean;
+  modelReady: boolean;
+  device?: string;
+}
+
 /** Which API keys are configured in OS-encrypted storage (not the values). */
 export interface SecretsStatus {
   openai: boolean;
@@ -190,6 +248,8 @@ export interface AetherBridge {
   installLocalLlm(): Promise<LocalLlmStatus>;
   startLocalLlm(): Promise<LocalLlmStatus>;
   stopLocalLlm(): Promise<LocalLlmStatus>;
+  getRvcInstallStatus(): Promise<RvcInstallStatus>;
+  installRvc(): Promise<RvcInstallStatus>;
   onAgentEvent(cb: (event: AgentEvent) => void): () => void;
   /** Fires when the global push-to-talk hotkey is pressed. */
   onPushToTalk(cb: () => void): () => void;
@@ -198,6 +258,10 @@ export interface AetherBridge {
   stopListening(): Promise<void>;
   /** Send captured microphone audio (WAV bytes) for transcription + agent turn. */
   submitAudio(wav: ArrayBuffer): Promise<void>;
+  /** Candidate clip from continuous wake listening (ignored unless wake word matches). */
+  submitWakeAudio(wav: ArrayBuffer): Promise<void>;
+  /** Stop speaking / cancel the active turn (barge-in or explicit cancel). */
+  interrupt(reason?: "barge-in" | "user"): Promise<void>;
   setClickThrough(enabled: boolean): Promise<void>;
   /** Report the mascot's opaque bounding box so the overlay can hit-test clicks. */
   setInteractiveRegion(rect: { x: number; y: number; width: number; height: number } | null): Promise<void>;

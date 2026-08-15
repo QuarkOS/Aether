@@ -11,6 +11,9 @@ build/
 apps/desktop/release/
 *.tsbuildinfo
 
+# Local tooling (ffmpeg, etc.)
+tools/
+
 # Downloaded models / runtime data (large binaries)
 services/voice/models/
 apps/desktop/resources/models/*/

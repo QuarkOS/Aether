@@ -56,6 +56,14 @@
   color: #3a0000;
 }
 
+.status-pill--timing {
+  background: rgba(8, 12, 24, 0.82);
+  color: #c8d4f0;
+  font-weight: 500;
+  max-width: 320px;
+  text-align: center;
+}
+
 .mascot {
   flex: 1 1 auto;
   width: 100%;
