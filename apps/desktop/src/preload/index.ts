@@ -32,6 +32,7 @@ const bridge: AetherBridge = {
   quit: () => ipcRenderer.invoke("app:quit"),
   connectToolkit: (toolkit: string) => ipcRenderer.invoke("integrations:connect", toolkit),
   listToolkits: () => ipcRenderer.invoke("integrations:list"),
+  listIntegrationStatus: () => ipcRenderer.invoke("integrations:status"),
 };
 
 contextBridge.exposeInMainWorld("aether", bridge);

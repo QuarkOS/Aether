@@ -150,7 +150,15 @@ export interface SpeakRequest {
   pitch?: number;
 }
 
-/** Lifecycle of the managed local llama.cpp server. */
+/** Live status for one Composio toolkit (not persisted). */
+export interface IntegrationToolkitStatus {
+  slug: string;
+  enabled: boolean;
+  connected: boolean;
+  accountLabel?: string;
+  lastError?: string;
+}
+
 export type LocalLlmState = "missing" | "downloading" | "ready" | "starting" | "running" | "error";
 
 /** Snapshot of the managed local llama.cpp install and process. */
@@ -199,6 +207,7 @@ export interface AetherBridge {
   /** Composio: begin OAuth for a toolkit, returns a redirect URL to open. */
   connectToolkit(toolkit: string): Promise<{ redirectUrl: string } | { error: string }>;
   listToolkits(): Promise<string[]>;
+  listIntegrationStatus(): Promise<IntegrationToolkitStatus[]>;
 }
 
 declare global {

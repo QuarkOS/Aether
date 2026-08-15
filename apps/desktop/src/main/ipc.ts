@@ -1,7 +1,7 @@
 import { app, ipcMain } from "electron";
 import type { AppConfig } from "@aether/shared";
 
-import { connectToolkit, popularToolkits } from "./agent/composio.js";
+import { connectToolkit, listIntegrationStatus, popularToolkits } from "./agent/composio.js";
 import { loadConfig, updateConfig } from "./config.js";
 import { broadcast, handleUserAudio, handleUserText } from "./controller.js";
 import { getLocalLlmStatus, installLocalLlm, startLocalLlm, stopLocalLlm } from "./localLlm/status.js";
@@ -99,4 +99,5 @@ export function registerIpc(onConfigChange: (config: AppConfig) => void, onQuit:
   });
 
   ipcMain.handle("integrations:list", () => popularToolkits());
+  ipcMain.handle("integrations:status", () => listIntegrationStatus(loadConfig()));
 }
