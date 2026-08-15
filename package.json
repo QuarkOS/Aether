@@ -1,6 +1,6 @@
 {
   "name": "aether",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "Aether — a desktop AI companion with the Alya mascot: voice commands, app integrations, and an Alya-voiced (RVC) assistant.",
   "engines": {

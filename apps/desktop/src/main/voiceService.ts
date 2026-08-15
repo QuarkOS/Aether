@@ -240,13 +240,15 @@ export async function speak(req: SpeakRequest): Promise<Buffer | null> {
 export async function transcribe(
   wav: Buffer,
   model?: string,
-  opts?: { initialPrompt?: string },
+  opts?: { initialPrompt?: string; wake?: boolean },
 ): Promise<string | null> {
   try {
     const form = new FormData();
     form.append("audio", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "audio.wav");
     if (model) form.append("model", model);
-    if (opts?.initialPrompt) form.append("initial_prompt", opts.initialPrompt);
+    if (opts?.wake) form.append("wake", "1");
+    const prompt = opts?.initialPrompt ?? (opts?.wake ? "Alya." : undefined);
+    if (prompt) form.append("initial_prompt", prompt);
     const res = await tryFetch("/stt", { method: "POST", body: form });
     if (!res.ok) {
       console.error(`[voice] /stt failed: ${res.status} ${await res.text()}`);

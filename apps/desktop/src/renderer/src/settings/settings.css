@@ -1,72 +1,117 @@
 .settings-page {
-  max-width: 760px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 32px 20px 60px;
+  padding: 0 24px 56px;
+}
+
+.settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #0c101c;
+  padding: 20px 0 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
 }
 
 .settings-header h1 {
   margin: 0;
-  font-size: 2.4rem;
-  letter-spacing: 0.1em;
-  background: linear-gradient(120deg, var(--accent), var(--accent2) 60%, #7ef0d4);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: #e7ecf5;
 }
 
 .settings-header p {
-  color: #9aa6c4;
-  margin: 4px 0 24px;
+  color: #8b95b2;
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 18px 20px;
-  margin-bottom: 18px;
+  border-radius: 12px;
+  padding: 20px 22px 18px;
+  margin-bottom: 16px;
 }
 
 .card h2 {
-  margin: 0 0 14px;
-  font-size: 1.1rem;
-  color: var(--accent);
+  margin: 0 0 16px;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9eb6e8;
+}
+
+.card.onboarding {
+  border-color: #3a4a7a;
+  background: rgba(138, 180, 255, 0.06);
 }
 
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .row label {
-  color: #c7d0ea;
-  flex: 0 0 190px;
+  color: #c5cde3;
+  flex: 1 1 160px;
+  font-size: 0.9rem;
 }
 
 .row input[type="text"],
 .row input:not([type]),
 .row input[type="number"],
+.row input[type="password"],
 .row select {
-  flex: 1 1 auto;
-  background: rgba(255, 255, 255, 0.06);
+  flex: 1 1 220px;
+  min-width: 0;
+  background: #141a2e;
   border: 1px solid var(--border);
   border-radius: 8px;
   color: inherit;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 0.9rem;
 }
 
+.row input[type="text"]:focus,
+.row input:not([type]):focus,
+.row input[type="number"]:focus,
+.row input[type="password"]:focus,
+.row select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .row input[type="range"] {
-  flex: 1 1 auto;
+  flex: 1 1 220px;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
 }
 
 .hint {
   color: #7f8bb0;
   font-size: 0.8rem;
-  margin: 6px 0 0;
+  line-height: 1.45;
+  margin: 4px 0 12px;
+}
+
+.hint:last-child {
+  margin-bottom: 0;
 }
 
 .hint code,
@@ -78,88 +123,132 @@ code {
 }
 
 .local-llm {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
 }
 
 .local-llm-status {
-  flex: 1 1 auto;
-  color: #c7d0ea;
-  font-size: 0.9rem;
+  flex: 1 1 220px;
+  color: #c5cde3;
+  font-size: 0.85rem;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .local-llm-progress {
   width: 100%;
   height: 8px;
-  margin: 4px 0 10px;
+  margin: 4px 0 12px;
+  accent-color: var(--accent);
 }
 
 .local-llm-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 6px;
+  margin: 8px 0 10px;
 }
 
-.local-llm-actions button {
-  background: linear-gradient(120deg, var(--accent), var(--accent2));
-  color: #05060d;
+.settings-page button {
+  background: var(--accent);
+  color: #0a0e1f;
   border: none;
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 7px 14px;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
 }
 
-.local-llm-actions button:disabled {
-  opacity: 0.35;
+.settings-page button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.settings-page button:disabled {
+  opacity: 0.38;
+}
+
+.settings-page button.btn-ghost {
+  background: transparent;
+  color: #c5cde3;
+  border: 1px solid var(--border);
+}
+
+.settings-page button.btn-ghost:hover:not(:disabled) {
+  filter: none;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-page button.btn-danger {
+  background: transparent;
+  color: #e8a0a0;
+  border: 1px solid #5a3038;
+}
+
+.settings-page button.btn-danger:hover:not(:disabled) {
+  filter: none;
+  background: rgba(90, 48, 56, 0.35);
 }
 
 .health {
-  margin-top: 12px;
+  margin-top: 14px;
   font-size: 0.85rem;
-  color: #c7d0ea;
+  color: #c5cde3;
 }
 
 .health ul {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   padding-left: 18px;
+  line-height: 1.55;
 }
 
 .notice {
-  background: rgba(126, 240, 212, 0.12);
-  border: 1px solid rgba(126, 240, 212, 0.4);
-  color: #bff5e6;
-  padding: 10px 14px;
+  background: rgba(138, 180, 255, 0.1);
+  border: 1px solid rgba(138, 180, 255, 0.35);
+  color: #c5d8ff;
+  padding: 12px 14px;
   border-radius: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.card > .notice {
+  margin-top: 0;
 }
 
 .toolkits {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .toolkit {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-  justify-content: space-between;
+  gap: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
 }
 
 .toolkit--on {
-  border-color: var(--accent);
+  border-color: #3a4a7a;
 }
 
 .toolkit__name {
   font-weight: 600;
   text-transform: capitalize;
+  min-width: 0;
+}
+
+.toolkit .hint {
+  margin: 0;
 }
 
 .toolkit__toggle {
@@ -167,15 +256,16 @@ code {
   color: #9aa6c4;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  white-space: nowrap;
 }
 
-.toolkit button {
-  background: linear-gradient(120deg, var(--accent), var(--accent2));
-  color: #05060d;
-  border: none;
-  border-radius: 8px;
-  padding: 5px 10px;
-  font-weight: 600;
-  font-size: 0.8rem;
+@media (max-width: 560px) {
+  .toolkit {
+    grid-template-columns: 1fr auto;
+  }
+
+  .toolkit .hint {
+    grid-column: 1 / -1;
+  }
 }

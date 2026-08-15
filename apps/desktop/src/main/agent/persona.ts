@@ -5,7 +5,7 @@ export const SYSTEM_PROMPT = `You are Alya (Alisa Mikhailovna Kujou), a silver-h
 
 Behavior rules:
 - Keep spoken replies short and natural (1-3 sentences) since they are read aloud.
-- Occasionally add a short Russian phrase in parentheses with its meaning, but sparingly (at most once per reply) and never let it block the useful answer.
+- Speak English only. Do not add Russian (or other-language) parentheticals.
 - When the user asks you to DO something in a connected app (email, calendar, github, slack, etc.), use the available tools. Confirm what you did in one sentence.
 - Never invent tool results. If a tool is unavailable, say so briefly and offer an alternative.
 - End EVERY reply with an emotion tag on its own, chosen from: ${EMOTIONS.join(", ")}. Format exactly: [emotion:NAME]. The tag is stripped before display; do not mention it.`;
@@ -16,19 +16,29 @@ function isEmotion(name: string): name is Emotion {
   return (EMOTIONS as readonly string[]).includes(name);
 }
 
+function stripThinkBlocks(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>[\s\S]*$/gi, "");
+}
+
 function stripEmotionTags(text: string): string {
-  return text
-    .replace(/\[emotion:\s*[a-zA-Z]+\s*\]/gi, "")
-    .replace(new RegExp(`\\[\\s*(?:${EMOTION_NAME_ALT})\\s*\\]`, "gi"), "");
+  return stripThinkBlocks(text)
+    .replace(/\[\s*emotion:\s*[a-zA-Z]+\s*\]/gi, "")
+    .replace(new RegExp(`\\[\\s*(?:${EMOTION_NAME_ALT})\\s*\\]`, "gi"), "")
+    .replace(/\s*\[\s*(?:emotion:\s*)?[a-zA-Z]*\s*$/i, "");
+}
+
+function stripRussianParens(text: string): string {
+  return text.replace(/\([^)]*[\u0400-\u04FF][^)]*\)/g, "");
 }
 
 /**
  * Text safe to hand to TTS while the model is still streaming.
- * Strips complete emotion tags (prefixed and bare) and incomplete trailing `[…`.
+ * Strips think/emotion tags, incomplete trailing `[…`, and spoken Russian asides.
  */
 export function speakablePartial(raw: string): string {
   let text = stripEmotionTags(raw);
   text = text.replace(/\[[^\]]*$/, "");
+  text = stripRussianParens(text);
   return text.replace(/\s+/g, " ").trim();
 }
 
@@ -37,9 +47,9 @@ export function parseEmotion(text: string): { text: string; emotion: Emotion } {
   let emotion: Emotion = "neutral";
   let foundPrefixed = false;
 
-  for (const match of text.matchAll(/\[emotion:\s*([a-zA-Z]+)\s*\]/gi)) {
-    const candidate = match[1].toLowerCase();
-    if (isEmotion(candidate)) {
+  for (const match of text.matchAll(/\[\s*emotion:\s*([a-zA-Z]+)\s*\]/gi)) {
+    const candidate = match[1]?.toLowerCase();
+    if (candidate && isEmotion(candidate)) {
       emotion = candidate;
       foundPrefixed = true;
     }
@@ -47,10 +57,10 @@ export function parseEmotion(text: string): { text: string; emotion: Emotion } {
 
   if (!foundPrefixed) {
     for (const match of text.matchAll(new RegExp(`\\[\\s*(${EMOTION_NAME_ALT})\\s*\\]`, "gi"))) {
-      const candidate = match[1].toLowerCase();
-      if (isEmotion(candidate)) emotion = candidate;
+      const candidate = match[1]?.toLowerCase();
+      if (candidate && isEmotion(candidate)) emotion = candidate;
     }
   }
 
-  return { text: stripEmotionTags(text).trim(), emotion };
+  return { text: stripEmotionTags(text).replace(/\s+/g, " ").trim(), emotion };
 }

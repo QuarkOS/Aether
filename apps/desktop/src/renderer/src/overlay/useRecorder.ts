@@ -5,12 +5,20 @@ import { useRef, useState } from "react";
  * simple silence-based auto-stop (VAD) so push-to-talk can be "tap to start,
  * stops when you finish speaking".
  */
-export function useRecorder(onComplete: (wav: ArrayBuffer) => void): {
+export function useRecorder(
+  onComplete: (wav: ArrayBuffer) => void,
+  opts?: { maxListenMs?: number },
+): {
   recording: boolean;
   start: () => Promise<void>;
   stop: () => void;
 } {
   const [recording, setRecording] = useState(false);
+  const recordingRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const maxListenMsRef = useRef(opts?.maxListenMs ?? 6000);
+  maxListenMsRef.current = opts?.maxListenMs ?? 6000;
   const streamRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const procRef = useRef<ScriptProcessorNode | null>(null);
@@ -28,17 +36,18 @@ export function useRecorder(onComplete: (wav: ArrayBuffer) => void): {
   };
 
   const finish = () => {
-    if (!recording) return;
+    if (!recordingRef.current) return;
+    recordingRef.current = false;
     setRecording(false);
     const sampleRate = ctxRef.current?.sampleRate ?? 48000;
     const merged = mergeChunks(chunksRef.current);
     cleanup();
     const wav = encodeWav(downsample(merged, sampleRate, 16000), 16000);
-    onComplete(wav);
+    onCompleteRef.current(wav);
   };
 
   const start = async (): Promise<void> => {
-    if (recording) return;
+    if (recordingRef.current) return;
     chunksRef.current = [];
     silenceMsRef.current = 0;
     startedAtRef.current = Date.now();
@@ -49,6 +58,7 @@ export function useRecorder(onComplete: (wav: ArrayBuffer) => void): {
     const source = ctx.createMediaStreamSource(stream);
     const proc = ctx.createScriptProcessor(4096, 1, 1);
     procRef.current = proc;
+    recordingRef.current = true;
     setRecording(true);
 
     proc.onaudioprocess = (e) => {
@@ -61,12 +71,18 @@ export function useRecorder(onComplete: (wav: ArrayBuffer) => void): {
       if (rms < 0.012) silenceMsRef.current += frameMs;
       else silenceMsRef.current = 0;
       const elapsed = Date.now() - startedAtRef.current;
-      // Auto-stop after ~1s of trailing silence (but require >0.6s of audio first).
-      if (elapsed > 600 && silenceMsRef.current > 1000) finish();
+      // Auto-stop after ~1s of trailing silence, or hard-cap the listen window.
+      if ((elapsed > 600 && silenceMsRef.current > 1000) || elapsed > maxListenMsRef.current) {
+        finish();
+      }
     };
 
+    // ScriptProcessor must reach destination to run; mute so PTT isn't looped.
+    const silent = ctx.createGain();
+    silent.gain.value = 0;
     source.connect(proc);
-    proc.connect(ctx.destination);
+    proc.connect(silent);
+    silent.connect(ctx.destination);
   };
 
   const stop = () => finish();

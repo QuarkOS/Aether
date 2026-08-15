@@ -101,10 +101,24 @@ function speakOpts(config: AppConfig): Pick<SpeakRequest, "voice" | "rvc" | "mod
   };
 }
 
+/** Peel a first-audio unit at a comma/colon or ~40 chars (word boundary). */
+function firstFlushFragment(text: string): string | null {
+  const punct = text.search(/[,;:]/);
+  if (punct >= 12 && punct <= 72) {
+    return text.slice(0, punct + 1).trim();
+  }
+  if (text.length >= 40) {
+    const window = text.slice(0, 48);
+    const sp = window.lastIndexOf(" ");
+    if (sp >= 24) return window.slice(0, sp).trim();
+  }
+  return null;
+}
+
 /**
- * AIRI-style TTS segmentation: speak the first sentence ASAP instead of waiting
+ * AIRI-style TTS segmentation: speak the first clause ASAP instead of waiting
  * for the entire reply to go through edge-tts + RVC.
- * First chunk stays short (low merge threshold) so time-to-first-audio drops.
+ * First chunk stays short (comma / ~40 chars) so time-to-first-audio drops.
  */
 function splitSpeakChunks(text: string): string[] {
   const cleaned = text.replace(/\s+/g, " ").trim();
@@ -114,11 +128,18 @@ function splitSpeakChunks(text: string): string[] {
       cleaned,
     ];
   const out: string[] = [];
-  for (const part of parts) {
+  for (let part of parts) {
+    if (out.length === 0) {
+      const early = firstFlushFragment(part);
+      if (early && early.length < part.length - 4) {
+        out.push(early);
+        part = part.slice(early.length).trim();
+        if (!part) continue;
+      }
+    }
     const prev = out[out.length - 1];
-    // Keep the first spoken unit short; merge later fragments only.
-    const mergePrevUnder = out.length <= 1 ? 28 : 48;
-    if (prev && (prev.length < mergePrevUnder || part.length < 16)) {
+    // Never merge back into the first spoken unit; merge later fragments only.
+    if (prev && out.length >= 2 && (prev.length < 48 || part.length < 16)) {
       out[out.length - 1] = `${prev} ${part}`;
     } else {
       out.push(part);
@@ -127,8 +148,21 @@ function splitSpeakChunks(text: string): string[] {
   return out.length ? out : [cleaned];
 }
 
-/** Complete sentences ready to speak from a streaming buffer (excludes a trailing fragment). */
-function takeCompleteSentences(text: string): { ready: string[]; rest: string } {
+/** Remainder of `full` after text already handed to TTS. */
+function unspokenTail(full: string, spoken: string): string {
+  if (!spoken) return full;
+  if (full.startsWith(spoken)) return full.slice(spoken.length).trim();
+  const a = full.toLowerCase();
+  const b = spoken.toLowerCase();
+  if (a.startsWith(b)) return full.slice(spoken.length).trim();
+  return "";
+}
+
+/** Units ready to speak from a streaming buffer (excludes a trailing fragment). */
+function takeCompleteSentences(
+  text: string,
+  opts?: { allowEarlyFlush?: boolean },
+): { ready: string[]; rest: string } {
   const cleaned = text.replace(/\s+/g, " ").trim();
   if (!cleaned) return { ready: [], rest: "" };
   const parts =
@@ -138,8 +172,13 @@ function takeCompleteSentences(text: string): { ready: string[]; rest: string } 
   if (parts.length === 0) return { ready: [], rest: "" };
   const last = parts[parts.length - 1]!;
   const lastComplete = /[.!?]["'”’]?$/.test(last);
-  if (lastComplete) return { ready: parts, rest: "" };
-  return { ready: parts.slice(0, -1), rest: last };
+  const ready = lastComplete ? parts : parts.slice(0, -1);
+  const rest = lastComplete ? "" : last;
+  if (ready.length === 0 && rest && opts?.allowEarlyFlush) {
+    const early = firstFlushFragment(rest);
+    if (early) return { ready: [early], rest: rest.slice(early.length).trim() };
+  }
+  return { ready, rest };
 }
 
 type SpeakJob = { text: string; emotion: Emotion };
@@ -157,8 +196,6 @@ class StreamingSpeaker {
   private closed = false;
   private cancelled = false;
   private playUntil = 0;
-  /** How many complete sentences from the stream we already enqueued. */
-  private readySpoken = 0;
   /** Concatenation of text already handed to TTS (normalized spaces). */
   private spokenText = "";
   private firstAudioAt: number | null = null;
@@ -175,10 +212,10 @@ class StreamingSpeaker {
   pushRaw(raw: string): void {
     if (this.closed || this.cancelled) return;
     const speakable = speakablePartial(raw);
-    const { ready } = takeCompleteSentences(speakable);
-    while (this.readySpoken < ready.length) {
-      const sentence = ready[this.readySpoken]!;
-      this.readySpoken += 1;
+    const unspoken = unspokenTail(speakable, this.spokenText);
+    if (!unspoken) return;
+    const { ready } = takeCompleteSentences(unspoken, { allowEarlyFlush: !this.spokenText });
+    for (const sentence of ready) {
       for (const chunk of splitSpeakChunks(sentence)) this.enqueue(chunk, "neutral");
     }
   }
@@ -370,15 +407,7 @@ async function runTimedTurn(text: string, sttMs?: number): Promise<void> {
 }
 
 /** Whisper often mishears the default wake name; accept common variants. */
-const ALYA_WAKE_ALIASES = [
-  "alya",
-  "alia",
-  "aliya",
-  "aliyah",
-  "aaliyah",
-  "all yeah",
-  "all ya",
-] as const;
+const ALYA_WAKE_ALIASES = ["alya", "alia", "alyah", "aliya", "aliyah", "aaliyah"] as const;
 
 const WAKE_PREFIXES = new Set(["hey", "ok", "okay"]);
 
@@ -418,11 +447,17 @@ function wakeAliasList(phrase: string): string[] {
   return [wake];
 }
 
-/** True when `token` is an exact or soft (Levenshtein ≤1) match for a single-token alias. */
+/** True when `token` is an exact or careful fuzzy match for a single-token alias. */
 function tokenMatchesAlias(token: string, alias: string): boolean {
   if (token === alias) return true;
-  // Reject long unrelated words (e.g. "alienation" vs "alia"): length must be within 1.
-  if (Math.abs(token.length - alias.length) > 1) return false;
+  // "all" / "ya" / "ala" stay out; "all yeah" is not an alias.
+  if (token.length < 4 || alias.length < 4) return false;
+  if (token[0] !== alias[0]) return false;
+  const lenDiff = Math.abs(token.length - alias.length);
+  if (lenDiff > 1) return false;
+  // 4-letter names: same-length substitution only (alya↔alia). Insertion
+  // would accept "alien" vs "alia"; longer aliases cover aliya/aliyah.
+  if ((alias.length < 5 || token.length < 5) && lenDiff !== 0) return false;
   return levenshtein(token, alias) <= 1;
 }
 
@@ -468,10 +503,10 @@ export function matchWakePhrase(
     return { woke: true, command: tokens.slice(after).join(" ").trim() };
   }
 
-  // Phrase embedded mid-utterance: "so alya what time is it"
+  // Clear name token later in the clip: "so alya what time is it"
   for (let i = start + 1; i < tokens.length; i++) {
     const midAfter = matchAliasAt(tokens, i, aliases);
-    if (midAfter >= 0 && midAfter < tokens.length) {
+    if (midAfter >= 0) {
       return { woke: true, command: tokens.slice(midAfter).join(" ").trim() };
     }
   }
@@ -536,8 +571,12 @@ export async function handleWakeAudio(wav: Buffer): Promise<void> {
   busy = true;
   try {
     const sttStart = Date.now();
-    const wakePrompt = `${config.input.wakePhrase.trim().replace(/^\w/, (c) => c.toUpperCase())}.`;
-    const text = await transcribe(wav, config.input.sttModel, { initialPrompt: wakePrompt });
+    const wakePhrase = config.input.wakePhrase.trim();
+    const wakePrompt = `${wakePhrase.replace(/^\w/, (c) => c.toUpperCase())}.`;
+    const text = await transcribe(wav, config.input.sttModel, {
+      wake: true,
+      initialPrompt: wakePrompt,
+    });
     const sttMs = Date.now() - sttStart;
     const transcript = (text ?? "").trim();
     console.log(`[wake] stt=${formatMs(sttMs)} transcript=${JSON.stringify(transcript)}`);

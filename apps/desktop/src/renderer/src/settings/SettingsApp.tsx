@@ -20,7 +20,7 @@ const DEFAULT_COMPAT_BASE_URL = "http://127.0.0.1:11434/v1";
 const EMPTY_SECRETS: SecretsStatus = { openai: false, composio: false };
 const EMPTY_RVC: RvcInstallStatus = { state: "missing", rvcAvailable: false, modelReady: false };
 
-type OnboardingStep = "welcome" | "mic" | "keys" | "done";
+type OnboardingStep = "welcome" | "mic" | "voice" | "keys" | "done";
 
 const ONBOARDING_COPY: Record<OnboardingStep, { title: string; body: string }> = {
   welcome: {
@@ -30,6 +30,10 @@ const ONBOARDING_COPY: Record<OnboardingStep, { title: string; body: string }> =
   mic: {
     title: "Microphone",
     body: "The first time you use the mic, Windows or Chromium will ask for permission. Allow it so push-to-talk and the dock mic can hear you. Speech-to-text runs locally via Whisper.",
+  },
+  voice: {
+    title: "Alya's voice",
+    body: "Optional: install the Alya RVC voice so spoken replies use her timbre (GPU recommended). Skip to keep the base TTS voice — you can set this up later under Voice.",
   },
   keys: {
     title: "Brain and apps",
@@ -234,7 +238,7 @@ export function SettingsApp() {
   };
 
   const nextOnboarding = () => {
-    const order: OnboardingStep[] = ["welcome", "mic", "keys", "done"];
+    const order: OnboardingStep[] = ["welcome", "mic", "voice", "keys", "done"];
     const i = order.indexOf(onboardingStep);
     if (i < 0 || i >= order.length - 1) {
       void finishOnboarding();
@@ -261,6 +265,8 @@ export function SettingsApp() {
       rvcInstall.state === "error" ||
       !rvcInstall.rvcAvailable ||
       !rvcInstall.modelReady);
+  const rvcReady =
+    rvcInstall.state === "ready" && rvcInstall.rvcAvailable && rvcInstall.modelReady;
 
   return (
     <div className="settings-page">
@@ -275,6 +281,24 @@ export function SettingsApp() {
         <section className="card onboarding">
           <h2>{ONBOARDING_COPY[onboardingStep].title}</h2>
           <p>{ONBOARDING_COPY[onboardingStep].body}</p>
+          {onboardingStep === "voice" && (
+            <div className="local-llm">
+              <div className="row">
+                <label>Alya voice setup</label>
+                <span className="local-llm-status">{rvcInstallLabel(rvcInstall)}</span>
+              </div>
+              {(rvcInstall.state === "downloading" ||
+                rvcInstall.state === "installing" ||
+                rvcInstall.progress != null) && (
+                <progress className="local-llm-progress" max={1} value={rvcInstall.progress ?? 0} />
+              )}
+              <div className="local-llm-actions">
+                <button type="button" disabled={!canSetupRvc} onClick={() => void runRvcInstall()}>
+                  Set up Alya's voice
+                </button>
+              </div>
+            </div>
+          )}
           <div className="local-llm-actions">
             {onboardingStep === "done" ? (
               <button type="button" onClick={() => void finishOnboarding()}>
@@ -285,7 +309,7 @@ export function SettingsApp() {
                 Next
               </button>
             )}
-            <button type="button" onClick={() => void finishOnboarding()}>
+            <button type="button" className="btn-ghost" onClick={() => void finishOnboarding()}>
               Skip
             </button>
           </div>
@@ -343,7 +367,7 @@ export function SettingsApp() {
               <button type="button" disabled={!openaiDraft.trim()} onClick={() => void saveSecret("openai", openaiDraft)}>
                 Save key
               </button>
-              <button type="button" disabled={!secrets.openai} onClick={() => void wipeSecret("openai")}>
+              <button type="button" className="btn-ghost" disabled={!secrets.openai} onClick={() => void wipeSecret("openai")}>
                 Clear
               </button>
             </div>
@@ -385,14 +409,32 @@ export function SettingsApp() {
 
       <section className="card">
         <h2>Voice</h2>
+        {canSetupRvc && (
+          <div className="notice">
+            Spoken replies use a generic TTS voice until you install Alya's RVC timbre.
+            <div className="local-llm-actions">
+              <button type="button" onClick={() => void runRvcInstall()}>
+                Set up Alya's voice
+              </button>
+            </div>
+          </div>
+        )}
         <div className="row">
           <label>Base TTS voice</label>
           <input value={config.voice.ttsVoice} onChange={(e) => patch({ voice: { ...config.voice, ttsVoice: e.target.value } })} />
         </div>
         <div className="row">
           <label>Alya voice (RVC)</label>
-          <input type="checkbox" checked={config.voice.rvcEnabled} onChange={(e) => patch({ voice: { ...config.voice, rvcEnabled: e.target.checked } })} />
+          <input
+            type="checkbox"
+            checked={config.voice.rvcEnabled}
+            disabled={!rvcReady}
+            onChange={(e) => patch({ voice: { ...config.voice, rvcEnabled: e.target.checked } })}
+          />
         </div>
+        {!rvcReady && (
+          <p className="hint">Install Alya voice below before enabling this. Until then, spoken replies use the base TTS voice.</p>
+        )}
         <div className="row">
           <label>Voice mode</label>
           <select value={config.voice.voiceMode} disabled>
@@ -542,7 +584,7 @@ export function SettingsApp() {
           <button type="button" disabled={!composioDraft.trim()} onClick={() => void saveSecret("composio", composioDraft)}>
             Save key
           </button>
-          <button type="button" disabled={!secrets.composio} onClick={() => void wipeSecret("composio")}>
+          <button type="button" className="btn-ghost" disabled={!secrets.composio} onClick={() => void wipeSecret("composio")}>
             Clear
           </button>
         </div>
@@ -585,13 +627,14 @@ export function SettingsApp() {
         <div className="local-llm-actions">
           <button
             type="button"
+            className="btn-ghost"
             onClick={() => {
               void patch({ onboardingCompleted: false }).then(() => setOnboardingStep("welcome"));
             }}
           >
             Show onboarding
           </button>
-          <button type="button" onClick={() => void window.aether.quit()}>
+          <button type="button" className="btn-danger" onClick={() => void window.aether.quit()}>
             Quit Aether
           </button>
         </div>

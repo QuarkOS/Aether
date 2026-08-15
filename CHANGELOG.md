@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.5 — 2026-08-15
+
+- Settings is a centered, always-on-top window above the mascot overlay (overlay was covering it); tighter layout, scrollable cards, no gradient chrome.
+- Speech bubble sits above Alya instead of under the Live2D canvas.
+- Restore wake-only Whisper `initial_prompt: "Alya."` so the name is detected; keep `all yeah`/`all ya` out. ScriptProcessor GainNode(0) mute remains the speaker-loop false-wake fix.
+- Faster first audio: speak at a comma or ~40 characters, not only after `.!?`; STT uses `beam_size=1`.
+- Onboarding step to Set up Alya's voice; RVC checkbox stays disabled until install is ready.
+- Strip think/emotion tags from the bubble and TTS; omit Russian parentheticals from speech (persona no longer asks for them).
+- Cap wake/PTT listen windows at ~6s.
+
 ## 1.0.4
 
 Windows RVC / Alya-v2 one-click setup, realtime wake word and barge-in, sentence TTS, latency fixes (skip huge FAISS indexes, force fast voice mode), emotion-tag stripping, and Settings UI for Alya voice setup.

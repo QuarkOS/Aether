@@ -10,6 +10,7 @@ if (!rootElement) throw new Error("Root element #root not found");
 
 const route = window.location.hash.replace(/^#/, "") || "/overlay";
 const isSettings = route.startsWith("/settings");
+if (isSettings) document.body.classList.add("settings");
 
 createRoot(rootElement).render(
   <StrictMode>{isSettings ? <SettingsApp /> : <OverlayApp />}</StrictMode>,

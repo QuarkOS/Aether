@@ -28,7 +28,7 @@ body {
 
 /* The settings view opts back into an opaque background. */
 body.settings {
-  background: radial-gradient(circle at 20% 20%, #1b2450 0%, #0a0e1f 60%, #05060d 100%);
+  background: #0c101c;
   overflow: auto;
   user-select: text;
 }

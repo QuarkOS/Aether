@@ -9,8 +9,10 @@ export function useWakeWord(opts: {
   enabled: boolean;
   suspended: boolean;
   onUtterance: (wav: ArrayBuffer) => void;
+  /** Hard-stop a capture so ambient noise cannot hold the mic open. */
+  maxListenMs?: number;
 }): void {
-  const { enabled, suspended, onUtterance } = opts;
+  const { enabled, suspended, onUtterance, maxListenMs = 5500 } = opts;
   const onUtteranceRef = useRef(onUtterance);
   onUtteranceRef.current = onUtterance;
   const suspendedRef = useRef(suspended);
@@ -68,6 +70,10 @@ export function useWakeWord(opts: {
       ctx = new AudioContext();
       const source = ctx.createMediaStreamSource(stream);
       proc = ctx.createScriptProcessor(4096, 1, 1);
+      // ScriptProcessor only runs if connected to destination; mute so the mic
+      // is not played back (speaker → mic loop was causing ambient false wakes).
+      const silent = ctx.createGain();
+      silent.gain.value = 0;
       let loudFrames = 0;
       proc.onaudioprocess = (e) => {
         if (suspendedRef.current || Date.now() < cooldownUntil) {
@@ -102,12 +108,13 @@ export function useWakeWord(opts: {
         if (rms < 0.016) silenceMs += frameMs;
         else silenceMs = 0;
         const elapsed = Date.now() - startedAt;
-        if ((elapsed > 900 && silenceMs > 1000) || elapsed > 4500) {
+        if ((elapsed > 900 && silenceMs > 1000) || elapsed > maxListenMs) {
           finishCapture();
         }
       };
       source.connect(proc);
-      proc.connect(ctx.destination);
+      proc.connect(silent);
+      silent.connect(ctx.destination);
     };
 
     void start();
@@ -115,7 +122,7 @@ export function useWakeWord(opts: {
       cancelled = true;
       cleanup();
     };
-  }, [enabled]);
+  }, [enabled, maxListenMs]);
 }
 
 function mergeChunks(chunks: Float32Array[]): Float32Array {

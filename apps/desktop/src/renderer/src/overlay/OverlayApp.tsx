@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentEvent, AppConfig, AssistantState, Emotion } from "@aether/shared";
-import { DEFAULT_CONFIG } from "@aether/shared";
+import { DEFAULT_CONFIG, EMOTIONS } from "@aether/shared";
 
 import { Mascot } from "./Mascot";
 import { useAudioPlayback } from "./useAudioPlayback";
@@ -13,6 +13,20 @@ import "./overlay.css";
 const MODEL_URLS: Record<string, string | null> = {
   placeholder: null,
 };
+
+const EMOTION_NAME_ALT = EMOTIONS.join("|");
+
+/** Strip think/emotion junk from the streaming bubble (TTS uses speakablePartial in main). */
+function stripBubbleJunk(text: string): string {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
+    .replace(/\[\s*emotion:\s*[a-zA-Z]+\s*\]/gi, "")
+    .replace(new RegExp(`\\[\\s*(?:${EMOTION_NAME_ALT})\\s*\\]`, "gi"), "")
+    .replace(/\[[^\]]*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function modelUrlFor(config: AppConfig): string | null {
   if (config.mascot.model in MODEL_URLS) return MODEL_URLS[config.mascot.model];
@@ -39,9 +53,12 @@ export function OverlayApp() {
   const { ampRef, play, stop: stopAudio } = useAudioPlayback();
   const speakRafRef = useRef<number | null>(null);
   const speakTimerRef = useRef<number | null>(null);
-  const { recording, start, stop } = useRecorder((wav) => {
-    void window.aether.submitAudio(wav);
-  });
+  const { recording, start, stop } = useRecorder(
+    (wav) => {
+      void window.aether.submitAudio(wav);
+    },
+    { maxListenMs: 6000 },
+  );
 
   const stopSpeaking = useCallback(() => {
     if (speakRafRef.current) cancelAnimationFrame(speakRafRef.current);
@@ -98,6 +115,7 @@ export function OverlayApp() {
     enabled: config.input.wakeWordEnabled,
     // Barge-in owns duplex while speaking; wake stays paused for PTT / think / speak.
     suspended: recording || state === "thinking" || state === "listening" || state === "speaking",
+    maxListenMs: 5500,
     onUtterance: (wav) => {
       void window.aether.submitWakeAudio(wav);
     },
@@ -128,10 +146,10 @@ export function OverlayApp() {
           break;
         case "assistant-delta":
           streamingRef.current += event.text;
-          setBubble(streamingRef.current);
+          setBubble(stripBubbleJunk(streamingRef.current));
           break;
         case "assistant-final":
-          setBubble(event.text);
+          setBubble(stripBubbleJunk(event.text));
           setEmotion(event.emotion);
           break;
         case "audio":

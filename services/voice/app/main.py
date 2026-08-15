@@ -151,11 +151,13 @@ def transcribe(
     audio: UploadFile = File(...),
     model: str = Form(None),
     initial_prompt: str | None = Form(None),
+    wake: str | None = Form(None),
 ) -> JSONResponse:
     if not stt.stt_available():
         return JSONResponse({"text": "", "error": "STT not available"}, status_code=503)
     _wait_warm("stt")
     # Prefer the warmed size so we never unload small to load base mid-session.
+    is_wake = str(wake or "").strip().lower() in ("1", "true", "yes")
     size = stt.resolve_size(model or _default_stt_model())
     suffix = os.path.splitext(audio.filename or "audio.wav")[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -163,8 +165,14 @@ def transcribe(
         tmp_path = tmp.name
     try:
         t0 = time.perf_counter()
-        text = stt.transcribe(tmp_path, size, initial_prompt=initial_prompt)
-        print(f"[stt] model={size} {(time.perf_counter() - t0) * 1000:.0f}ms chars={len(text)}")
+        prompt = (initial_prompt or "").strip() or ("Alya." if is_wake else None)
+        text = stt.transcribe(
+            tmp_path,
+            size,
+            initial_prompt=prompt,
+            wake=is_wake,
+        )
+        print(f"[stt] model={size} wake={is_wake} {(time.perf_counter() - t0) * 1000:.0f}ms chars={len(text)}")
         return JSONResponse({"text": text, "model": size})
     finally:
         try:

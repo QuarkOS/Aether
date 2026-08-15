@@ -78,20 +78,27 @@ def transcribe(
     wav_path: str,
     size: str = "small",
     initial_prompt: str | None = None,
+    *,
+    wake: bool = False,
 ) -> str:
     model = _get_model(size)
     # Force English: auto language ID often mislabels short English clips (e.g. as German).
     # VAD trim (AIRI-style) drops leading/trailing silence before decode.
+    # beam_size=1: greedy decode is enough for short English clips and cuts STT latency.
     kwargs: dict = {
-        "beam_size": 5,
+        "beam_size": 1,
         "language": "en",
         "vad_filter": True,
         "vad_parameters": {"min_silence_duration_ms": 400},
         "condition_on_previous_text": False,
         "without_timestamps": True,
     }
-    # Wake clips may pass a short bias (e.g. "Alya."); PTT leaves this unset.
-    prompt = (initial_prompt or "").strip()
+    if wake:
+        # Bias decode toward the mascot name; PTT/conversation must not use this.
+        kwargs["no_speech_threshold"] = 0.72
+        prompt = (initial_prompt or "Alya.").strip()
+    else:
+        prompt = (initial_prompt or "").strip()
     if prompt:
         kwargs["initial_prompt"] = prompt
     segments, _info = model.transcribe(wav_path, **kwargs)

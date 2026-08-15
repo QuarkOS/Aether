@@ -50,6 +50,10 @@ export function useBargeIn(opts: {
       ctx = new AudioContext();
       const source = ctx.createMediaStreamSource(stream);
       proc = ctx.createScriptProcessor(4096, 1, 1);
+      // Must connect to destination to keep the node alive; mute to avoid a
+      // speaker → mic loop while Alya is talking.
+      const silent = ctx.createGain();
+      silent.gain.value = 0;
       proc.onaudioprocess = (e) => {
         if (!activeRef.current) {
           speechMs = 0;
@@ -78,7 +82,8 @@ export function useBargeIn(opts: {
         }
       };
       source.connect(proc);
-      proc.connect(ctx.destination);
+      proc.connect(silent);
+      silent.connect(ctx.destination);
     };
 
     void start();
