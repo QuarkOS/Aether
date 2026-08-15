@@ -12,6 +12,27 @@ function parseLlmProvider(value: string): AppConfig["llm"]["provider"] | undefin
 const DEFAULT_COMPAT_BASE_URL = "http://127.0.0.1:11434/v1";
 const EMPTY_SECRETS: SecretsStatus = { openai: false, composio: false };
 
+type OnboardingStep = "welcome" | "mic" | "keys" | "done";
+
+const ONBOARDING_COPY: Record<OnboardingStep, { title: string; body: string }> = {
+  welcome: {
+    title: "Meet Alya",
+    body: "Alya lives in the corner of your screen. Type in the dock or use push-to-talk. Text chat works even when voice is down.",
+  },
+  mic: {
+    title: "Microphone",
+    body: "The first time you use the mic, Windows or Chromium will ask for permission. Allow it so push-to-talk and the dock mic can hear you. Speech-to-text runs locally via Whisper.",
+  },
+  keys: {
+    title: "Brain and apps",
+    body: "Paste an OpenAI key below, or Set up the local Heretic llama.cpp brain, or point OpenAI-compatible at your own server. Composio needs its own key for Gmail and friends. Spoken replies use edge-tts on the network.",
+  },
+  done: {
+    title: "You're set",
+    body: "You can reopen this walkthrough from Startup. Quit lives on the tray icon.",
+  },
+};
+
 function localLlmLabel(status: LocalLlmStatus): string {
   switch (status.state) {
     case "missing":
@@ -47,10 +68,14 @@ export function SettingsApp() {
   const [composioDraft, setComposioDraft] = useState("");
   const [toolkits, setToolkits] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("welcome");
 
   useEffect(() => {
     document.body.classList.add("settings");
-    void window.aether.getConfig().then(setConfig);
+    void window.aether.getConfig().then((cfg) => {
+      setConfig(cfg);
+      if (!cfg.onboardingCompleted) setOnboardingStep("welcome");
+    });
     void window.aether.getVoiceHealth().then(setHealth);
     void window.aether.getLocalLlmStatus().then(setLocalLlm);
     void window.aether.getSecretsStatus().then(setSecrets);
@@ -131,7 +156,23 @@ export function SettingsApp() {
     setNotice(id === "openai" ? "OpenAI key cleared." : "Composio key cleared.");
   };
 
+  const finishOnboarding = async () => {
+    await patch({ onboardingCompleted: true });
+    setNotice("Onboarding complete.");
+  };
+
+  const nextOnboarding = () => {
+    const order: OnboardingStep[] = ["welcome", "mic", "keys", "done"];
+    const i = order.indexOf(onboardingStep);
+    if (i < 0 || i >= order.length - 1) {
+      void finishOnboarding();
+      return;
+    }
+    setOnboardingStep(order[i + 1]!);
+  };
+
   const windowsOnly = Boolean(localLlm.message?.includes("Windows-only"));
+  const showOnboarding = !config.onboardingCompleted;
   const inFlight =
     localLlmBusy || localLlm.state === "downloading" || localLlm.state === "starting";
   const canSetup = !windowsOnly && !inFlight && localLlm.state !== "running";
@@ -147,6 +188,27 @@ export function SettingsApp() {
       </header>
 
       {notice && <div className="notice">{notice}</div>}
+
+      {showOnboarding && (
+        <section className="card onboarding">
+          <h2>{ONBOARDING_COPY[onboardingStep].title}</h2>
+          <p>{ONBOARDING_COPY[onboardingStep].body}</p>
+          <div className="local-llm-actions">
+            {onboardingStep === "done" ? (
+              <button type="button" onClick={() => void finishOnboarding()}>
+                Finish
+              </button>
+            ) : (
+              <button type="button" onClick={nextOnboarding}>
+                Next
+              </button>
+            )}
+            <button type="button" onClick={() => void finishOnboarding()}>
+              Skip
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="card">
         <h2>Assistant brain</h2>
@@ -365,6 +427,16 @@ export function SettingsApp() {
         <div className="row">
           <label>Start Aether on login</label>
           <input type="checkbox" checked={config.startOnLogin} onChange={(e) => patch({ startOnLogin: e.target.checked })} />
+        </div>
+        <div className="local-llm-actions">
+          <button
+            type="button"
+            onClick={() => {
+              void patch({ onboardingCompleted: false }).then(() => setOnboardingStep("welcome"));
+            }}
+          >
+            Show onboarding
+          </button>
         </div>
       </section>
     </div>

@@ -103,6 +103,8 @@ export interface AppConfig {
     userId: string;
   };
   startOnLogin: boolean;
+  /** First-run walkthrough completed. */
+  onboardingCompleted: boolean;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -125,6 +127,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   integrations: { enabledToolkits: [], userId: "" },
   startOnLogin: false,
+  onboardingCompleted: false,
 };
 
 /** Health/capabilities reported by the Python voice service. */

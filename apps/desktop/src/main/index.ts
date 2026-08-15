@@ -8,7 +8,7 @@ import { registerIpc } from "./ipc.js";
 import { stopLocalLlm } from "./localLlm/status.js";
 import { createTray, rebuildMenu } from "./tray.js";
 import { ensureVoiceService, stopVoiceService, waitForVoiceReady } from "./voiceService.js";
-import { createOverlayWindow, getOverlayWindow } from "./windows.js";
+import { createOverlayWindow, getOverlayWindow, openSettingsWindow } from "./windows.js";
 
 let quitting = false;
 
@@ -46,6 +46,10 @@ async function bootstrap(): Promise<void> {
   createOverlayWindow(config);
   createTray(doQuit);
   applyHotkeys(config);
+
+  if (!config.onboardingCompleted) {
+    openSettingsWindow();
+  }
 
   try {
     app.setLoginItemSettings({ openAtLogin: config.startOnLogin });
