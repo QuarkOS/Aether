@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+Fix Windows Release packaging so electron-builder resolves Electron 32.1.0 in the npm workspace.
+
 ## 1.0.0
 
 First public Windows V1.

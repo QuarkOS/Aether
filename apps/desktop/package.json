@@ -1,6 +1,6 @@
 {
   "name": "@aether/desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Aether desktop companion (Electron overlay + Alya mascot).",
   "main": "./out/main/index.js",
@@ -28,10 +28,10 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^32.1.0",
-    "electron-builder": "^25.0.5",
-    "electron-vite": "^2.3.0",
-    "pixi.js": "^7.4.2",
+    "electron-builder": "25.1.8",
+    "electron-vite": "2.3.0",
     "pixi-live2d-display-lipsyncpatch": "^0.5.0-ls-7",
+    "pixi.js": "^7.4.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite": "^5.4.2"
@@ -40,6 +40,7 @@
     "appId": "dev.aether.companion",
     "productName": "Aether",
     "copyright": "Copyright © 2026 QuarkOS / Aether contributors",
+    "electronVersion": "32.1.0",
     "directories": {
       "buildResources": "resources",
       "output": "release"
@@ -64,7 +65,9 @@
       }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "resources/app-icon.png",
       "artifactName": "Aether-Setup-${version}.${ext}",
       "signAndEditExecutable": false
@@ -77,7 +80,12 @@
       "shortcutName": "Aether",
       "uninstallDisplayName": "Aether"
     },
-    "mac": { "category": "public.app-category.productivity" },
-    "linux": { "target": "AppImage", "category": "Utility" }
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
+    }
   }
 }
