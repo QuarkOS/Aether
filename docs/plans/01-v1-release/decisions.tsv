@@ -1,4 +1,13 @@
 ts	phase	decision	why	evidence	result
 2026-08-15T09:47:00Z	frame	Autonomous run not Orchestrate; exit = phases 4-11 stacked + tip typecheck/lint green + stack merged to main + this PC can npm run dev	one session can finish; Orchestrate ceremony would slow clone-shaped units	docs/plans/01-v1-release/overview.md	open
 2026-08-15T09:47:30Z	frame	Keep one PR per phase then merge the contiguous stack	matches prior human choice stack-then-merge	PRs #3 #4 #5	open
-2026-08-15T10:00:00Z	phase-4	PR #6 secrets safeStorage	env override kept	https://github.com/QuarkOS/Aether/pull/6	open
+2026-08-15T10:00:00Z	phase-4	PR #6 secrets safeStorage	env override kept	https://github.com/QuarkOS/Aether/pull/6	merged
+2026-08-15T10:05:00Z	phase-5	PR #7 onboarding	Settings walkthrough + first-launch open	https://github.com/QuarkOS/Aether/pull/7	merged
+2026-08-15T10:10:00Z	phase-6	PR #8 tray/overlay UX	tray icon, dock mic PTT, quit	https://github.com/QuarkOS/Aether/pull/8	merged
+2026-08-15T10:15:00Z	phase-7	PR #9 Composio status	live toolkit status + Connect needs key	https://github.com/QuarkOS/Aether/pull/9	merged
+2026-08-15T10:20:00Z	phase-8	PR #10 packaged voice	embeddable Python+ffmpeg into userData	https://github.com/QuarkOS/Aether/pull/10	merged
+2026-08-15T10:25:00Z	phase-9	PR #11 NSIS metadata	Aether-Setup artifact; exclude .venv	https://github.com/QuarkOS/Aether/pull/11	merged
+2026-08-15T10:30:00Z	phase-10	PR #12 CI+Release 1.0.0	ci.yml + release-windows.yml	https://github.com/QuarkOS/Aether/pull/12	merged
+2026-08-15T10:35:00Z	phase-11	PR #13 docs/legal	README Windows-first + LICENSE/PRIVACY	https://github.com/QuarkOS/Aether/pull/13	merged
+2026-08-15T10:40:00Z	ship	Merged #3-#13 to main bottom-up; tip typecheck/lint green; no Graphite MWR	session budget; independent cloud per-PR skipped	main@360026d	done
+2026-08-15T10:45:00Z	setup	This PC npm install + shared build + voice venv requirements	exit predicate	services/voice/.venv	done
