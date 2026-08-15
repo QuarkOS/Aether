@@ -11,3 +11,4 @@ ts	phase	decision	why	evidence	result
 2026-08-15T10:35:00Z	phase-11	PR #13 docs/legal	README Windows-first + LICENSE/PRIVACY	https://github.com/QuarkOS/Aether/pull/13	merged
 2026-08-15T10:40:00Z	ship	Merged #3-#13 to main bottom-up; tip typecheck/lint green; no Graphite MWR	session budget; independent cloud per-PR skipped	main@360026d	done
 2026-08-15T10:45:00Z	setup	This PC npm install + shared build + voice venv requirements	exit predicate	services/voice/.venv	done
+2026-08-15T10:50:00Z	release	Published v1.0.3 with locally built Aether-Setup-1.0.2.exe; GHA package still fails spawning app-builder on runner	local package:win proved artifact; upload via gh release create	https://github.com/QuarkOS/Aether/releases/tag/v1.0.3	done
