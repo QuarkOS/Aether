@@ -423,11 +423,16 @@ export function SettingsApp() {
           Stored with OS encryption. Env <code>COMPOSIO_API_KEY</code> still wins when set. Enable a toolkit, then Connect.
         </p>
         <div className="toolkits">
-          {(integrationStatus.length ? integrationStatus : toolkits.map((slug) => ({
-            slug,
-            enabled: config.integrations.enabledToolkits.includes(slug),
-            connected: false,
-          }))).map((row) => (
+          {(integrationStatus.length
+            ? integrationStatus
+            : toolkits.map(
+                (slug): IntegrationToolkitStatus => ({
+                  slug,
+                  enabled: config.integrations.enabledToolkits.includes(slug),
+                  connected: false,
+                }),
+              )
+          ).map((row) => (
             <div key={row.slug} className={`toolkit ${row.enabled ? "toolkit--on" : ""}`}>
               <span className="toolkit__name">{row.slug}</span>
               <span className="hint">
