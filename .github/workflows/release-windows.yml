@@ -19,19 +19,18 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Verify electron-builder binaries
-        shell: pwsh
+      - name: Build shared and desktop
         run: |
-          $p = "node_modules/app-builder-bin/win/x64/app-builder.exe"
-          if (-not (Test-Path $p)) {
-            npm rebuild app-builder-bin
-          }
-          if (-not (Test-Path $p)) { throw "missing $p" }
+          npm run build --workspace @aether/shared
+          npm run build --workspace @aether/desktop
+      - name: Install desktop production deps into app dir
+        working-directory: apps/desktop
+        run: npm install --omit=dev --no-save --install-strategy=nested
       - name: Package Windows installer
+        working-directory: apps/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run package:win
-      # Signing deferred for V1. Later: CSC_LINK / CSC_KEY_PASSWORD.
+        run: npx --no-install electron-builder --win nsis --x64 --config.npmRebuild=false
       - name: Upload installer
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

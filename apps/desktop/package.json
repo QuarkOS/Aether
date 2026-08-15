@@ -1,6 +1,6 @@
 {
   "name": "@aether/desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Aether desktop companion (Electron overlay + Alya mascot).",
   "main": "./out/main/index.js",
@@ -12,8 +12,8 @@
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
-    "package": "electron-vite build && electron-builder --win nsis",
-    "package:win": "electron-vite build && electron-builder --win nsis --x64"
+    "package": "electron-vite build && electron-builder --win nsis --config.npmRebuild=false",
+    "package:win": "electron-vite build && electron-builder --win nsis --x64 --config.npmRebuild=false"
   },
   "dependencies": {
     "@aether/shared": "*",
@@ -41,6 +41,7 @@
     "productName": "Aether",
     "copyright": "Copyright © 2026 QuarkOS / Aether contributors",
     "electronVersion": "32.1.0",
+    "npmRebuild": false,
     "directories": {
       "buildResources": "resources",
       "output": "release"
