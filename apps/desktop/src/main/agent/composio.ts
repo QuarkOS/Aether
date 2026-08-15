@@ -1,5 +1,7 @@
 import type { AppConfig } from "@aether/shared";
 
+import { resolveComposioKey } from "../secrets.js";
+
 /**
  * Composio integration is loaded lazily and defensively: the SDK surface can
  * change, and the app must keep working (conversationally) even if tools are
@@ -12,7 +14,7 @@ type AnyRecord = Record<string, any>;
 let composioClient: AnyRecord | null = null;
 
 async function getClient(): Promise<AnyRecord | null> {
-  const apiKey = process.env.COMPOSIO_API_KEY;
+  const apiKey = resolveComposioKey();
   if (!apiKey) return null;
   if (composioClient) return composioClient;
   try {

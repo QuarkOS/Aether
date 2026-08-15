@@ -160,10 +160,21 @@ export interface LocalLlmStatus {
   backend?: "vulkan" | "cpu";
 }
 
+/** Which API keys are configured in OS-encrypted storage (not the values). */
+export interface SecretsStatus {
+  openai: boolean;
+  composio: boolean;
+}
+
+export type SecretId = "openai" | "composio";
+
 /** The API the preload script exposes to the renderer as `window.aether`. */
 export interface AetherBridge {
   getConfig(): Promise<AppConfig>;
   setConfig(patch: Partial<AppConfig>): Promise<AppConfig>;
+  getSecretsStatus(): Promise<SecretsStatus>;
+  setSecret(id: SecretId, value: string): Promise<{ ok: true } | { error: string }>;
+  clearSecret(id: SecretId): Promise<void>;
   getLocalLlmStatus(): Promise<LocalLlmStatus>;
   installLocalLlm(): Promise<LocalLlmStatus>;
   startLocalLlm(): Promise<LocalLlmStatus>;

@@ -1,9 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AetherBridge, AgentEvent, AppConfig } from "@aether/shared";
+import type { AetherBridge, AgentEvent, AppConfig, SecretId } from "@aether/shared";
 
 const bridge: AetherBridge = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   setConfig: (patch: Partial<AppConfig>) => ipcRenderer.invoke("config:set", patch),
+  getSecretsStatus: () => ipcRenderer.invoke("secrets:status"),
+  setSecret: (id: SecretId, value: string) => ipcRenderer.invoke("secrets:set", id, value),
+  clearSecret: (id: SecretId) => ipcRenderer.invoke("secrets:clear", id),
   getLocalLlmStatus: () => ipcRenderer.invoke("localLlm:status"),
   installLocalLlm: () => ipcRenderer.invoke("localLlm:install"),
   startLocalLlm: () => ipcRenderer.invoke("localLlm:start"),
