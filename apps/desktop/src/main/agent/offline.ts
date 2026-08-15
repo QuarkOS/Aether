@@ -16,6 +16,16 @@ export function offlineReply(input: string): { text: string; emotion: Emotion } 
   if (/\bhow are you|how's it going\b/.test(q)) {
     return { text: "I'm perfectly fine, obviously. More importantly, what do you need?", emotion: "neutral" };
   }
+  // Emotional intent is checked before time/date so phrases like "sad today" win.
+  if (/\b(stupid|idiot|dumb|shut up|useless|hate you|baka)\b/.test(q)) {
+    return { text: "Haah? Say that one more time and see what happens. Durak.", emotion: "angry" };
+  }
+  if (/\b(sad|depressed|lonely|feel(ing)? down|upset|crying)\b/.test(q)) {
+    return { text: "...Hey. Are you alright? I'm right here if you want to talk about it.", emotion: "sad" };
+  }
+  if (/\b(cute|pretty|beautiful|love you|adorable|gorgeous)\b/.test(q)) {
+    return { text: "W-what are you saying all of a sudden?! Honestly…", emotion: "shy" };
+  }
   if (/\b(time|what time)\b/.test(q)) {
     return { text: `It's ${new Date().toLocaleTimeString()}. Don't tell me you can't read a clock.`, emotion: "smug" };
   }

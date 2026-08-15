@@ -12,6 +12,12 @@ import embarrassedTalk from "../assets/mascot/alya_embarrassed_talk.png";
 import surprised from "../assets/mascot/alya_surprised.png";
 import thinking from "../assets/mascot/alya_thinking.png";
 import thinkingTalk from "../assets/mascot/alya_thinking_talk.png";
+import angry from "../assets/mascot/alya_angry.png";
+import angryTalk from "../assets/mascot/alya_angry_talk.png";
+import sad from "../assets/mascot/alya_sad.png";
+import sadTalk from "../assets/mascot/alya_sad_talk.png";
+import shyImg from "../assets/mascot/alya_shy.png";
+import shyTalk from "../assets/mascot/alya_shy_talk.png";
 
 interface Props {
   emotion: Emotion;
@@ -30,10 +36,10 @@ const SPRITES: Record<Emotion, Sprite> = {
   neutral: { closed: neutral, open: neutralTalk },
   happy: { closed: happy, open: happyTalk },
   smug: { closed: smug, open: smugTalk },
-  shy: { closed: embarrassed, open: embarrassedTalk },
+  shy: { closed: shyImg, open: shyTalk },
   embarrassed: { closed: embarrassed, open: embarrassedTalk },
-  angry: { closed: smug, open: smugTalk },
-  sad: { closed: thinking, open: thinkingTalk },
+  angry: { closed: angry, open: angryTalk },
+  sad: { closed: sad, open: sadTalk },
   surprised: { closed: surprised, open: surprised },
   thinking: { closed: thinking, open: thinkingTalk },
 };

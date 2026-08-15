@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { BrowserWindow, screen, shell } from "electron";
 import type { AppConfig } from "@aether/shared";
 
-const OVERLAY_WIDTH = 460;
-const OVERLAY_HEIGHT = 640;
+const OVERLAY_WIDTH = 300;
+const OVERLAY_HEIGHT = 460;
 const MARGIN = 16;
 
 let overlayWindow: BrowserWindow | null = null;
