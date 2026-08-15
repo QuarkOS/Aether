@@ -10,14 +10,47 @@ Behavior rules:
 - Never invent tool results. If a tool is unavailable, say so briefly and offer an alternative.
 - End EVERY reply with an emotion tag on its own, chosen from: ${EMOTIONS.join(", ")}. Format exactly: [emotion:NAME]. The tag is stripped before display; do not mention it.`;
 
-/** Extracts and strips the trailing [emotion:NAME] tag from model output. */
+const EMOTION_NAME_ALT = EMOTIONS.join("|");
+
+function isEmotion(name: string): name is Emotion {
+  return (EMOTIONS as readonly string[]).includes(name);
+}
+
+function stripEmotionTags(text: string): string {
+  return text
+    .replace(/\[emotion:\s*[a-zA-Z]+\s*\]/gi, "")
+    .replace(new RegExp(`\\[\\s*(?:${EMOTION_NAME_ALT})\\s*\\]`, "gi"), "");
+}
+
+/**
+ * Text safe to hand to TTS while the model is still streaming.
+ * Strips complete emotion tags (prefixed and bare) and incomplete trailing `[…`.
+ */
+export function speakablePartial(raw: string): string {
+  let text = stripEmotionTags(raw);
+  text = text.replace(/\[[^\]]*$/, "");
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** Extracts and strips emotion tags from model output (`[emotion:NAME]` or bare `[NAME]`). */
 export function parseEmotion(text: string): { text: string; emotion: Emotion } {
-  const match = text.match(/\[emotion:\s*([a-zA-Z]+)\s*\]/i);
   let emotion: Emotion = "neutral";
-  if (match) {
-    const candidate = match[1].toLowerCase() as Emotion;
-    if ((EMOTIONS as string[]).includes(candidate)) emotion = candidate;
+  let foundPrefixed = false;
+
+  for (const match of text.matchAll(/\[emotion:\s*([a-zA-Z]+)\s*\]/gi)) {
+    const candidate = match[1].toLowerCase();
+    if (isEmotion(candidate)) {
+      emotion = candidate;
+      foundPrefixed = true;
+    }
   }
-  const cleaned = text.replace(/\[emotion:\s*[a-zA-Z]+\s*\]/gi, "").trim();
-  return { text: cleaned, emotion };
+
+  if (!foundPrefixed) {
+    for (const match of text.matchAll(new RegExp(`\\[\\s*(${EMOTION_NAME_ALT})\\s*\\]`, "gi"))) {
+      const candidate = match[1].toLowerCase();
+      if (isEmotion(candidate)) emotion = candidate;
+    }
+  }
+
+  return { text: stripEmotionTags(text).trim(), emotion };
 }

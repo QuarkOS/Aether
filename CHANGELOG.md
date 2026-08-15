@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+Windows RVC / Alya-v2 one-click setup, realtime wake word and barge-in, sentence TTS, latency fixes (skip huge FAISS indexes, force fast voice mode), emotion-tag stripping, and Settings UI for Alya voice setup.
+
 ## 1.0.2
 
 Fix Windows packaging for npm workspaces (pin and hoist Electron / electron-builder).

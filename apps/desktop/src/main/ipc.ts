@@ -3,8 +3,9 @@ import type { AppConfig } from "@aether/shared";
 
 import { connectToolkit, listIntegrationStatus, popularToolkits } from "./agent/composio.js";
 import { loadConfig, updateConfig } from "./config.js";
-import { broadcast, handleUserAudio, handleUserText } from "./controller.js";
+import { broadcast, handleUserAudio, handleUserText, handleWakeAudio, interruptActiveTurn } from "./controller.js";
 import { getLocalLlmStatus, installLocalLlm, startLocalLlm, stopLocalLlm } from "./localLlm/status.js";
+import { getRvcInstallStatus, installRvc } from "./rvcInstall/status.js";
 import {
   clearSecret,
   getSecretsStatus,
@@ -12,7 +13,7 @@ import {
   setSecret,
   type SecretId,
 } from "./secrets.js";
-import { getHealth } from "./voiceService.js";
+import { getHealth, restartVoiceService } from "./voiceService.js";
 import {
   openExternal,
   openSettingsWindow,
@@ -24,6 +25,7 @@ export function registerIpc(onConfigChange: (config: AppConfig) => void, onQuit:
   ipcMain.handle("config:get", () => loadConfig());
 
   ipcMain.handle("config:set", (_e, patch: Partial<AppConfig>) => {
+    const prev = loadConfig();
     const next = updateConfig(patch);
     onConfigChange(next);
     if (patch.mascot?.anchor) repositionOverlay(next);
@@ -37,6 +39,10 @@ export function registerIpc(onConfigChange: (config: AppConfig) => void, onQuit:
         console.error("[ipc] setLoginItemSettings failed:", err);
       }
     }
+    if (patch.input?.sttModel && patch.input.sttModel !== prev.input.sttModel) {
+      console.log(`[ipc] sttModel changed ${prev.input.sttModel} → ${next.input.sttModel}; restarting voice`);
+      void restartVoiceService();
+    }
     return next;
   });
 
@@ -46,6 +52,14 @@ export function registerIpc(onConfigChange: (config: AppConfig) => void, onQuit:
 
   ipcMain.handle("agent:audio", async (_e, wav: ArrayBuffer) => {
     await handleUserAudio(Buffer.from(wav));
+  });
+
+  ipcMain.handle("agent:wakeAudio", async (_e, wav: ArrayBuffer) => {
+    await handleWakeAudio(Buffer.from(wav));
+  });
+
+  ipcMain.handle("agent:interrupt", (_e, reason?: "barge-in" | "user") => {
+    interruptActiveTurn(reason === "barge-in" ? "barge-in" : "user");
   });
 
   ipcMain.handle("agent:startListening", () => {
@@ -75,6 +89,9 @@ export function registerIpc(onConfigChange: (config: AppConfig) => void, onQuit:
   ipcMain.handle("localLlm:install", () => installLocalLlm());
   ipcMain.handle("localLlm:start", () => startLocalLlm());
   ipcMain.handle("localLlm:stop", () => stopLocalLlm());
+
+  ipcMain.handle("rvc:status", () => getRvcInstallStatus());
+  ipcMain.handle("rvc:install", () => installRvc());
 
   ipcMain.handle("secrets:status", () => getSecretsStatus());
   ipcMain.handle("secrets:set", (_e, id: string, value: string) => {

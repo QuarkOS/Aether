@@ -3,6 +3,7 @@ import type {
   AppConfig,
   IntegrationToolkitStatus,
   LocalLlmStatus,
+  RvcInstallStatus,
   SecretsStatus,
   VoiceHealth,
 } from "@aether/shared";
@@ -17,6 +18,7 @@ function parseLlmProvider(value: string): AppConfig["llm"]["provider"] | undefin
 
 const DEFAULT_COMPAT_BASE_URL = "http://127.0.0.1:11434/v1";
 const EMPTY_SECRETS: SecretsStatus = { openai: false, composio: false };
+const EMPTY_RVC: RvcInstallStatus = { state: "missing", rvcAvailable: false, modelReady: false };
 
 type OnboardingStep = "welcome" | "mic" | "keys" | "done";
 
@@ -64,11 +66,36 @@ function localLlmLabel(status: LocalLlmStatus): string {
   }
 }
 
+function rvcInstallLabel(status: RvcInstallStatus): string {
+  switch (status.state) {
+    case "missing":
+      return status.message ?? (status.modelReady ? "Model present; packages not installed" : "Not installed");
+    case "downloading": {
+      const pct = status.progress != null ? ` ${Math.round(status.progress * 100)}%` : "";
+      return (status.message ?? "Downloading") + pct;
+    }
+    case "installing": {
+      const pct = status.progress != null ? ` ${Math.round(status.progress * 100)}%` : "";
+      return (status.message ?? "Installing") + pct;
+    }
+    case "ready":
+      return status.message ?? "Alya RVC ready";
+    case "error":
+      return status.message ?? "Failed";
+    default: {
+      const _exhaustive: never = status.state;
+      return _exhaustive;
+    }
+  }
+}
+
 export function SettingsApp() {
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [health, setHealth] = useState<VoiceHealth | null>(null);
   const [localLlm, setLocalLlm] = useState<LocalLlmStatus>({ state: "missing" });
   const [localLlmBusy, setLocalLlmBusy] = useState(false);
+  const [rvcInstall, setRvcInstall] = useState<RvcInstallStatus>(EMPTY_RVC);
+  const [rvcBusy, setRvcBusy] = useState(false);
   const [secrets, setSecrets] = useState<SecretsStatus>(EMPTY_SECRETS);
   const [openaiDraft, setOpenaiDraft] = useState("");
   const [composioDraft, setComposioDraft] = useState("");
@@ -85,6 +112,7 @@ export function SettingsApp() {
     });
     void window.aether.getVoiceHealth().then(setHealth);
     void window.aether.getLocalLlmStatus().then(setLocalLlm);
+    void window.aether.getRvcInstallStatus().then(setRvcInstall);
     void window.aether.getSecretsStatus().then(setSecrets);
     void window.aether.listToolkits().then(setToolkits);
     void window.aether.listIntegrationStatus().then(setIntegrationStatus);
@@ -109,6 +137,22 @@ export function SettingsApp() {
     }, fast ? 400 : 2500);
     return () => window.clearInterval(interval);
   }, [localLlm.state]);
+
+  useEffect(() => {
+    const fast = rvcInstall.state === "downloading" || rvcInstall.state === "installing";
+    const tick = async () => {
+      const next = await window.aether.getRvcInstallStatus();
+      setRvcInstall(next);
+      if (next.state === "ready") {
+        setConfig(await window.aether.getConfig());
+        setHealth(await window.aether.getVoiceHealth());
+      }
+    };
+    const interval = window.setInterval(() => {
+      void tick();
+    }, fast ? 400 : 2500);
+    return () => window.clearInterval(interval);
+  }, [rvcInstall.state]);
 
   const patch = async (p: Partial<AppConfig>) => {
     const next = await window.aether.setConfig(p);
@@ -153,6 +197,18 @@ export function SettingsApp() {
     }
   };
 
+  const runRvcInstall = async () => {
+    setRvcBusy(true);
+    try {
+      const next = await window.aether.installRvc();
+      setRvcInstall(next);
+      setConfig(await window.aether.getConfig());
+      setHealth(await window.aether.getVoiceHealth());
+    } finally {
+      setRvcBusy(false);
+    }
+  };
+
   const saveSecret = async (id: "openai" | "composio", value: string) => {
     setNotice(null);
     const res = await window.aether.setSecret(id, value);
@@ -188,6 +244,7 @@ export function SettingsApp() {
   };
 
   const windowsOnly = Boolean(localLlm.message?.includes("Windows-only"));
+  const rvcWindowsOnly = Boolean(rvcInstall.message?.includes("targets Windows"));
   const showOnboarding = !config.onboardingCompleted;
   const inFlight =
     localLlmBusy || localLlm.state === "downloading" || localLlm.state === "starting";
@@ -195,6 +252,15 @@ export function SettingsApp() {
   const canStart =
     !windowsOnly && !inFlight && (localLlm.state === "ready" || localLlm.state === "error");
   const canStop = !windowsOnly && (localLlm.state === "running" || localLlm.state === "starting");
+  const rvcInFlight =
+    rvcBusy || rvcInstall.state === "downloading" || rvcInstall.state === "installing";
+  const canSetupRvc =
+    !rvcWindowsOnly &&
+    !rvcInFlight &&
+    (rvcInstall.state === "missing" ||
+      rvcInstall.state === "error" ||
+      !rvcInstall.rvcAvailable ||
+      !rvcInstall.modelReady);
 
   return (
     <div className="settings-page">
@@ -327,10 +393,38 @@ export function SettingsApp() {
           <label>Alya voice (RVC)</label>
           <input type="checkbox" checked={config.voice.rvcEnabled} onChange={(e) => patch({ voice: { ...config.voice, rvcEnabled: e.target.checked } })} />
         </div>
+        <div className="row">
+          <label>Voice mode</label>
+          <select value={config.voice.voiceMode} disabled>
+            <option value="fast">Fast</option>
+            <option value="quality">Quality</option>
+          </select>
+        </div>
         <p className="hint">
-          RVC is off by default. It needs the optional ML extras (<code>requirements-ml.txt</code>) and a GPU. If
-          health below says RVC unavailable, the base TTS voice is used instead.
+          Quality mode is migrated to fast so RVC does not stall. Huge FAISS indexes are skipped for
+          latency. If the named edge-tts voice is missing, Jenny falls back to Aria internally.
         </p>
+        <div className="local-llm">
+          <div className="row">
+            <label>Alya voice setup</label>
+            <span className="local-llm-status">{rvcInstallLabel(rvcInstall)}</span>
+          </div>
+          {(rvcInstall.state === "downloading" ||
+            rvcInstall.state === "installing" ||
+            rvcInstall.progress != null) && (
+            <progress className="local-llm-progress" max={1} value={rvcInstall.progress ?? 0} />
+          )}
+          <div className="local-llm-actions">
+            <button type="button" disabled={!canSetupRvc} onClick={() => void runRvcInstall()}>
+              Set up Alya voice
+            </button>
+          </div>
+          <p className="hint">
+            On Windows this downloads portable Python 3.10, torch, rvc-python, and the Alya-v2 model
+            (Chouio/Alisa). Needs a GPU for the real timbre. If health below says RVC unavailable, the
+            base TTS voice is used instead.
+          </p>
+        </div>
         <div className="row">
           <label>RVC model</label>
           <input value={config.voice.rvcModel} onChange={(e) => patch({ voice: { ...config.voice, rvcModel: e.target.value } })} />
@@ -361,6 +455,39 @@ export function SettingsApp() {
           <label>Push-to-talk hotkey</label>
           <input value={config.input.pushToTalkHotkey} onChange={(e) => patch({ input: { ...config.input, pushToTalkHotkey: e.target.value } })} />
         </div>
+        <div className="row">
+          <label>Wake word</label>
+          <input
+            type="checkbox"
+            checked={config.input.wakeWordEnabled}
+            onChange={(e) => patch({ input: { ...config.input, wakeWordEnabled: e.target.checked } })}
+          />
+        </div>
+        {config.input.wakeWordEnabled && (
+          <div className="row">
+            <label>Wake phrase</label>
+            <input
+              value={config.input.wakePhrase}
+              onChange={(e) => patch({ input: { ...config.input, wakePhrase: e.target.value } })}
+            />
+          </div>
+        )}
+        <p className="hint">
+          Continuous mic listen for the wake phrase (default <code>alya</code>). Energy plus STT keyword
+          gate; then a short command capture window opens.
+        </p>
+        <div className="row">
+          <label>Barge-in</label>
+          <input
+            type="checkbox"
+            checked={config.input.bargeInEnabled}
+            onChange={(e) => patch({ input: { ...config.input, bargeInEnabled: e.target.checked } })}
+          />
+        </div>
+        <p className="hint">
+          Listen while Alya speaks. Energy/VAD barge-in stops TTS, clears the speak queue, and aborts
+          the in-flight reply so you can start a new turn.
+        </p>
         <div className="row">
           <label>Whisper model</label>
           <select value={config.input.sttModel} onChange={(e) => patch({ input: { ...config.input, sttModel: e.target.value } })}>

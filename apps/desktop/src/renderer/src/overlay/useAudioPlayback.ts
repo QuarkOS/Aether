@@ -4,6 +4,8 @@ interface Playback {
   /** Latest lip-sync amplitude (0..1) and the time it was measured. */
   ampRef: MutableRefObject<{ value: number; t: number }>;
   play: (url: string) => Promise<void>;
+  /** Pause current clip (barge-in / interrupt). */
+  stop: () => void;
 }
 
 /**
@@ -73,5 +75,13 @@ export function useAudioPlayback(): Playback {
     }
   }, []);
 
-  return { ampRef, play };
+  const stop = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    audioRef.current?.pause();
+    if (audioRef.current) audioRef.current.src = "";
+    ampRef.current = { value: 0, t: performance.now() };
+  }, []);
+
+  return { ampRef, play, stop };
 }

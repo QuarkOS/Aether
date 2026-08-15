@@ -16,6 +16,9 @@ services/voice/models/
 apps/desktop/resources/models/*/
 !apps/desktop/resources/models/.gitkeep
 
+# Local ffmpeg / test audio (not part of the repo)
+tools/
+
 # Logs
 *.log
 npm-debug.log*

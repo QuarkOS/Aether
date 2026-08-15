@@ -1,7 +1,8 @@
 import { BrowserWindow } from "electron";
-import type { AgentEvent, Emotion } from "@aether/shared";
+import type { AgentEvent, AppConfig, Emotion, SpeakRequest } from "@aether/shared";
 
 import { runAgentTurn } from "./agent/agent.js";
+import { speakablePartial } from "./agent/persona.js";
 import { loadConfig } from "./config.js";
 import { speak, transcribe } from "./voiceService.js";
 
@@ -12,7 +13,52 @@ export function broadcast(event: AgentEvent): void {
   }
 }
 
+/** Active voice turn: speak queue + barge-in cancel via abort. */
+type ActiveSession = {
+  id: number;
+  abort: AbortController;
+  speaker: StreamingSpeaker;
+};
+
+let session: ActiveSession | null = null;
+let sessionSeq = 0;
+/** Soft lock for starting a new user turn. */
 let busy = false;
+
+function beginSession(config: AppConfig, turnStart: number): ActiveSession {
+  sessionSeq += 1;
+  const next: ActiveSession = {
+    id: sessionSeq,
+    abort: new AbortController(),
+    speaker: new StreamingSpeaker(config, turnStart),
+  };
+  session = next;
+  return next;
+}
+
+function isCurrent(s: ActiveSession): boolean {
+  return session?.id === s.id;
+}
+
+/** Cancel TTS + active turn. Duplex barge-in / PTT / new turn. */
+export function interruptActiveTurn(reason: "barge-in" | "user" | "new-turn" = "user"): void {
+  const active = session;
+  if (!active) {
+    broadcast({ type: "audio-stop" });
+    broadcast({ type: "interrupted", reason });
+    broadcast({ type: "state", state: "idle" });
+    busy = false;
+    return;
+  }
+  console.log(`[duplex] interrupt reason=${reason} session=${active.id}`);
+  active.abort.abort();
+  active.speaker.cancel();
+  session = null;
+  busy = false;
+  broadcast({ type: "audio-stop" });
+  broadcast({ type: "interrupted", reason });
+  broadcast({ type: "state", state: "idle" });
+}
 
 /** Reads the duration of a PCM WAV buffer in ms by scanning its RIFF chunks. */
 function wavDurationMs(wav: Buffer): number {
@@ -39,54 +85,482 @@ function wavDurationMs(wav: Buffer): number {
   return 2000;
 }
 
-async function synthesizeAndEmit(text: string, emotion: Emotion): Promise<void> {
-  const config = loadConfig();
-  const wav = await speak({
-    text,
+function formatMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+}
+
+function speakOpts(config: AppConfig): Pick<SpeakRequest, "voice" | "rvc" | "model" | "pitch" | "mode"> {
+  // Conversation path always uses fast RVC. Quality mode + big indexes caused
+  // multi-minute stalls; Settings "quality" is ignored for live turns.
+  return {
     voice: config.voice.ttsVoice,
     rvc: config.voice.rvcEnabled,
     model: config.voice.rvcModel,
     pitch: config.voice.rvcPitch,
-  });
-  if (wav) {
-    const url = `data:audio/wav;base64,${wav.toString("base64")}`;
-    // The renderer owns the speaking->idle lifecycle so lip-sync matches playback.
-    const durationMs = wavDurationMs(wav);
-    broadcast({ type: "audio", url, emotion, durationMs });
-  } else {
-    broadcast({ type: "state", state: "idle" });
+    mode: "fast",
+  };
+}
+
+/**
+ * AIRI-style TTS segmentation: speak the first sentence ASAP instead of waiting
+ * for the entire reply to go through edge-tts + RVC.
+ * First chunk stays short (low merge threshold) so time-to-first-audio drops.
+ */
+function splitSpeakChunks(text: string): string[] {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  const parts =
+    cleaned.match(/[^.!?]+[.!?]+(?:["'”’])?|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [
+      cleaned,
+    ];
+  const out: string[] = [];
+  for (const part of parts) {
+    const prev = out[out.length - 1];
+    // Keep the first spoken unit short; merge later fragments only.
+    const mergePrevUnder = out.length <= 1 ? 28 : 48;
+    if (prev && (prev.length < mergePrevUnder || part.length < 16)) {
+      out[out.length - 1] = `${prev} ${part}`;
+    } else {
+      out.push(part);
+    }
   }
+  return out.length ? out : [cleaned];
+}
+
+/** Complete sentences ready to speak from a streaming buffer (excludes a trailing fragment). */
+function takeCompleteSentences(text: string): { ready: string[]; rest: string } {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return { ready: [], rest: "" };
+  const parts =
+    cleaned.match(/[^.!?]+[.!?]+(?:["'”’])?|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [
+      cleaned,
+    ];
+  if (parts.length === 0) return { ready: [], rest: "" };
+  const last = parts[parts.length - 1]!;
+  const lastComplete = /[.!?]["'”’]?$/.test(last);
+  if (lastComplete) return { ready: parts, rest: "" };
+  return { ready: parts.slice(0, -1), rest: last };
+}
+
+type SpeakJob = { text: string; emotion: Emotion };
+
+/**
+ * Queues sentence clips as the LLM streams. Prefetches the next /speak while
+ * the current clip plays. Speaks the first complete sentence before the turn ends.
+ * cancel() clears the queue for barge-in.
+ */
+class StreamingSpeaker {
+  private readonly opts: ReturnType<typeof speakOpts>;
+  private queue: SpeakJob[] = [];
+  private pumpRunning = false;
+  private pumpPromise: Promise<void> = Promise.resolve();
+  private closed = false;
+  private cancelled = false;
+  private playUntil = 0;
+  /** How many complete sentences from the stream we already enqueued. */
+  private readySpoken = 0;
+  /** Concatenation of text already handed to TTS (normalized spaces). */
+  private spokenText = "";
+  private firstAudioAt: number | null = null;
+  private readonly turnStart: number;
+  private ttsWorkMs = 0;
+  private waitResolve: (() => void) | null = null;
+
+  constructor(_config: AppConfig, turnStart: number) {
+    this.opts = speakOpts(_config);
+    this.turnStart = turnStart;
+  }
+
+  /** Feed cumulative raw model output (including think tags). */
+  pushRaw(raw: string): void {
+    if (this.closed || this.cancelled) return;
+    const speakable = speakablePartial(raw);
+    const { ready } = takeCompleteSentences(speakable);
+    while (this.readySpoken < ready.length) {
+      const sentence = ready[this.readySpoken]!;
+      this.readySpoken += 1;
+      for (const chunk of splitSpeakChunks(sentence)) this.enqueue(chunk, "neutral");
+    }
+  }
+
+  /** Speak a canned bridging line immediately (async tool path). */
+  enqueueImmediate(text: string, emotion: Emotion = "thinking"): void {
+    if (this.cancelled) return;
+    this.enqueue(text, emotion);
+  }
+
+  /** Flush remainder after the final cleaned reply is known. */
+  async finish(finalText: string, emotion: Emotion): Promise<number> {
+    if (this.cancelled) return this.ttsWorkMs;
+    this.closed = true;
+    const cleaned = finalText.replace(/\s+/g, " ").trim();
+    let remaining = cleaned;
+    if (this.spokenText) {
+      if (cleaned.startsWith(this.spokenText)) {
+        remaining = cleaned.slice(this.spokenText.length).trim();
+      } else {
+        // Stream vs final mismatch (emotion strip, etc.): skip re-speaking if we already started.
+        const spokenNorm = this.spokenText.toLowerCase();
+        const cleanedNorm = cleaned.toLowerCase();
+        if (cleanedNorm.startsWith(spokenNorm)) {
+          remaining = cleaned.slice(this.spokenText.length).trim();
+        } else if (this.spokenText.length > 0) {
+          remaining = "";
+        }
+      }
+    }
+    for (const chunk of splitSpeakChunks(remaining)) {
+      if (chunk) this.enqueue(chunk, emotion);
+    }
+    for (const job of this.queue) job.emotion = emotion;
+    // Drain until idle (handles pump-exit vs enqueue races).
+    for (;;) {
+      if (this.cancelled) break;
+      await this.pumpPromise;
+      if (this.cancelled || (this.queue.length === 0 && !this.pumpRunning)) break;
+      this.kickPump();
+    }
+    return this.ttsWorkMs;
+  }
+
+  cancel(): void {
+    this.cancelled = true;
+    this.closed = true;
+    this.queue = [];
+    this.playUntil = 0;
+    this.waitResolve?.();
+    this.waitResolve = null;
+  }
+
+  get ttfaMs(): number | undefined {
+    return this.firstAudioAt !== null ? this.firstAudioAt - this.turnStart : undefined;
+  }
+
+  private enqueue(text: string, emotion: Emotion): void {
+    if (this.cancelled) return;
+    const t = text.replace(/\s+/g, " ").trim();
+    if (!t) return;
+    this.spokenText = this.spokenText ? `${this.spokenText} ${t}` : t;
+    this.queue.push({ text: t, emotion });
+    this.kickPump();
+  }
+
+  private kickPump(): void {
+    if (this.pumpRunning || this.cancelled) return;
+    this.pumpRunning = true;
+    this.pumpPromise = this.pump().finally(() => {
+      this.pumpRunning = false;
+      if (!this.cancelled && this.queue.length > 0) this.kickPump();
+    });
+  }
+
+  private async waitPlayGap(): Promise<void> {
+    const wait = this.playUntil - Date.now();
+    if (wait <= 0) return;
+    await new Promise<void>((resolve) => {
+      this.waitResolve = resolve;
+      setTimeout(() => {
+        this.waitResolve = null;
+        resolve();
+      }, wait);
+    });
+  }
+
+  private async pump(): Promise<void> {
+    let next: Promise<Buffer | null> | null = null;
+
+    while (!this.cancelled && (this.queue.length > 0 || next)) {
+      const job = this.queue.shift();
+      const pending = next;
+      next = null;
+
+      let wav: Buffer | null;
+      const synthStart = Date.now();
+      if (pending) {
+        wav = await pending;
+      } else if (job) {
+        wav = await speak({ text: job.text, ...this.opts });
+      } else {
+        break;
+      }
+      this.ttsWorkMs += Date.now() - synthStart;
+      if (this.cancelled) break;
+
+      const following = this.queue[0];
+      if (following && !this.cancelled) {
+        next = speak({ text: following.text, ...this.opts });
+      }
+
+      if (!wav) continue;
+      if (this.firstAudioAt === null) this.firstAudioAt = Date.now();
+      await this.waitPlayGap();
+      if (this.cancelled) break;
+      const durationMs = wavDurationMs(wav);
+      const url = `data:audio/wav;base64,${wav.toString("base64")}`;
+      broadcast({
+        type: "audio",
+        url,
+        emotion: job?.emotion ?? "neutral",
+        durationMs,
+      });
+      this.playUntil = Date.now() + durationMs;
+    }
+
+    if (!this.cancelled && this.playUntil === 0) broadcast({ type: "state", state: "idle" });
+  }
+}
+
+/** Stream LLM and speak sentence chunks as they arrive. */
+async function runTimedTurn(text: string, sttMs?: number): Promise<void> {
+  const config = loadConfig();
+  const turnWallStart = Date.now();
+  broadcast({ type: "user-transcript", text });
+  broadcast({ type: "state", state: "thinking" });
+
+  const active = beginSession(config, turnWallStart);
+  const { speaker, abort } = active;
+
+  let rawAccum = "";
+  const llmStart = Date.now();
+  const result = await runAgentTurn(text, config, (event) => {
+    if (!isCurrent(active)) return;
+    broadcast(event);
+    if (event.type === "assistant-delta") {
+      rawAccum += event.text;
+      speaker.pushRaw(rawAccum);
+    }
+  });
+  const llmMs = Date.now() - llmStart;
+
+  if (!isCurrent(active) || abort.signal.aborted) {
+    busy = false;
+    return;
+  }
+
+  const speakText =
+    result.text.trim() ||
+    "Sorry, I got stuck thinking and didn't finish a reply. Try again?";
+  broadcast({ type: "assistant-final", text: speakText, emotion: result.emotion });
+  const ttsMs = await speaker.finish(speakText, result.emotion);
+  const ttfaMs = speaker.ttfaMs;
+  if (session?.id === active.id) session = null;
+
+  const totalMs = (sttMs ?? 0) + (Date.now() - turnWallStart);
+  const timing = {
+    type: "turn-timing" as const,
+    ...(sttMs !== undefined ? { sttMs } : {}),
+    llmMs,
+    ttsMs,
+    ...(ttfaMs !== undefined ? { ttfaMs } : {}),
+    totalMs,
+    rvcRequested: config.voice.rvcEnabled,
+  };
+  const parts = [
+    sttMs !== undefined ? `stt=${formatMs(sttMs)}` : null,
+    `llm=${formatMs(llmMs)}`,
+    ttfaMs !== undefined ? `ttfa=${formatMs(ttfaMs)}` : null,
+    `tts=${formatMs(ttsMs)}`,
+    `total=${formatMs(totalMs)}`,
+    `rvc=${config.voice.rvcEnabled ? "on" : "off"}`,
+    `mode=${config.voice.voiceMode}`,
+    "path=realtime",
+  ].filter(Boolean);
+  console.log(`[turn] ${parts.join(" ")}`);
+  if (!abort.signal.aborted) broadcast(timing);
+}
+
+/** Whisper often mishears the default wake name; accept common variants. */
+const ALYA_WAKE_ALIASES = [
+  "alya",
+  "alia",
+  "aliya",
+  "aliyah",
+  "aaliyah",
+  "all yeah",
+  "all ya",
+] as const;
+
+const WAKE_PREFIXES = new Set(["hey", "ok", "okay"]);
+
+/** Collapse punctuation/symbols so "Alya!" / "Alya…" match cleanly. */
+function normalizeWakeText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const prev = new Array<number>(b.length + 1);
+  const curr = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1]! + cost);
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j]!;
+  }
+  return prev[b.length]!;
+}
+
+function wakeAliasList(phrase: string): string[] {
+  const wake = normalizeWakeText(phrase);
+  if (!wake) return [];
+  if (wake === "alya" || (ALYA_WAKE_ALIASES as readonly string[]).includes(wake)) {
+    return [...ALYA_WAKE_ALIASES];
+  }
+  return [wake];
+}
+
+/** True when `token` is an exact or soft (Levenshtein ≤1) match for a single-token alias. */
+function tokenMatchesAlias(token: string, alias: string): boolean {
+  if (token === alias) return true;
+  // Reject long unrelated words (e.g. "alienation" vs "alia"): length must be within 1.
+  if (Math.abs(token.length - alias.length) > 1) return false;
+  return levenshtein(token, alias) <= 1;
+}
+
+/**
+ * Try to consume a wake alias at `tokens[start]`. Returns the index after the
+ * matched alias, or -1 if none match.
+ */
+function matchAliasAt(tokens: string[], start: number, aliases: string[]): number {
+  if (start >= tokens.length) return -1;
+  for (const alias of aliases) {
+    const parts = alias.split(" ");
+    if (parts.length === 1) {
+      const tok = tokens[start];
+      if (tok && tokenMatchesAlias(tok, parts[0]!)) return start + 1;
+      continue;
+    }
+    if (
+      parts.length === 2 &&
+      tokens[start] === parts[0] &&
+      tokens[start + 1] === parts[1]
+    ) {
+      return start + 2;
+    }
+  }
+  return -1;
+}
+
+/** Detect wake phrase; return remaining command text (may be empty). */
+export function matchWakePhrase(
+  transcript: string,
+  phrase: string,
+): { woke: boolean; command: string } {
+  const text = normalizeWakeText(transcript);
+  const aliases = wakeAliasList(phrase);
+  if (!text || aliases.length === 0) return { woke: false, command: "" };
+
+  const tokens = text.split(" ");
+  let start = 0;
+  if (tokens[0] && WAKE_PREFIXES.has(tokens[0])) start = 1;
+
+  const after = matchAliasAt(tokens, start, aliases);
+  if (after >= 0) {
+    return { woke: true, command: tokens.slice(after).join(" ").trim() };
+  }
+
+  // Phrase embedded mid-utterance: "so alya what time is it"
+  for (let i = start + 1; i < tokens.length; i++) {
+    const midAfter = matchAliasAt(tokens, i, aliases);
+    if (midAfter >= 0 && midAfter < tokens.length) {
+      return { woke: true, command: tokens.slice(midAfter).join(" ").trim() };
+    }
+  }
+
+  return { woke: false, command: "" };
 }
 
 /** Full turn from already-transcribed text: agent -> speech. */
 export async function handleUserText(text: string): Promise<void> {
-  if (busy) return;
+  if (busy || session) {
+    interruptActiveTurn("new-turn");
+  }
   busy = true;
   try {
-    const config = loadConfig();
-    broadcast({ type: "user-transcript", text });
-    broadcast({ type: "state", state: "thinking" });
-    const result = await runAgentTurn(text, config, broadcast);
-    broadcast({ type: "assistant-final", text: result.text, emotion: result.emotion });
-    await synthesizeAndEmit(result.text, result.emotion);
+    await runTimedTurn(text);
   } catch (err) {
     broadcast({ type: "error", message: String(err) });
     broadcast({ type: "state", state: "idle" });
   } finally {
     busy = false;
+    session = null;
   }
 }
 
 /** Full turn from captured microphone audio: STT -> agent -> speech. */
 export async function handleUserAudio(wav: Buffer): Promise<void> {
+  if (busy || session) {
+    interruptActiveTurn("new-turn");
+  }
+  busy = true;
+  try {
+    const config = loadConfig();
+    broadcast({ type: "state", state: "thinking" });
+    const sttStart = Date.now();
+    const text = await transcribe(wav, config.input.sttModel);
+    const sttMs = Date.now() - sttStart;
+    console.log(`[turn] stt=${formatMs(sttMs)} transcript=${JSON.stringify(text ?? "")}`);
+    if (!text?.trim()) {
+      broadcast({ type: "error", message: "I didn't catch that — try again?" });
+      broadcast({ type: "state", state: "idle" });
+      return;
+    }
+    await runTimedTurn(text.trim(), sttMs);
+  } catch (err) {
+    broadcast({ type: "error", message: String(err) });
+    broadcast({ type: "state", state: "idle" });
+  } finally {
+    busy = false;
+    session = null;
+  }
+}
+
+/**
+ * Continuous wake-mic clip: ignore unless the configured phrase is present.
+ * "Alya, what's up?" runs immediately; bare "Alya" arms a follow-up capture.
+ */
+export async function handleWakeAudio(wav: Buffer): Promise<void> {
   if (busy) return;
   const config = loadConfig();
-  broadcast({ type: "state", state: "thinking" });
-  const text = await transcribe(wav, config.input.sttModel);
-  if (!text || !text.trim()) {
-    broadcast({ type: "error", message: "I couldn't make out any speech." });
+  if (!config.input.wakeWordEnabled) return;
+
+  busy = true;
+  try {
+    const sttStart = Date.now();
+    const wakePrompt = `${config.input.wakePhrase.trim().replace(/^\w/, (c) => c.toUpperCase())}.`;
+    const text = await transcribe(wav, config.input.sttModel, { initialPrompt: wakePrompt });
+    const sttMs = Date.now() - sttStart;
+    const transcript = (text ?? "").trim();
+    console.log(`[wake] stt=${formatMs(sttMs)} transcript=${JSON.stringify(transcript)}`);
+    if (!transcript) {
+      return;
+    }
+    const { woke, command } = matchWakePhrase(transcript, config.input.wakePhrase);
+    if (!woke) {
+      console.log(`[wake] ignore (no phrase match)`);
+      return;
+    }
+    console.log(`[wake] armed command=${JSON.stringify(command)}`);
+    if (command) {
+      await runTimedTurn(command, sttMs);
+      return;
+    }
+    broadcast({ type: "wake-armed" });
+    broadcast({ type: "state", state: "listening" });
+  } catch (err) {
+    broadcast({ type: "error", message: String(err) });
     broadcast({ type: "state", state: "idle" });
-    return;
+  } finally {
+    busy = false;
+    session = null;
   }
-  await handleUserText(text.trim());
 }

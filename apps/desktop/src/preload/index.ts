@@ -11,6 +11,8 @@ const bridge: AetherBridge = {
   installLocalLlm: () => ipcRenderer.invoke("localLlm:install"),
   startLocalLlm: () => ipcRenderer.invoke("localLlm:start"),
   stopLocalLlm: () => ipcRenderer.invoke("localLlm:stop"),
+  getRvcInstallStatus: () => ipcRenderer.invoke("rvc:status"),
+  installRvc: () => ipcRenderer.invoke("rvc:install"),
   onAgentEvent: (cb: (event: AgentEvent) => void) => {
     const listener = (_e: unknown, event: AgentEvent) => cb(event);
     ipcRenderer.on("agent-event", listener);
@@ -25,6 +27,8 @@ const bridge: AetherBridge = {
   startListening: () => ipcRenderer.invoke("agent:startListening"),
   stopListening: () => ipcRenderer.invoke("agent:stopListening"),
   submitAudio: (wav: ArrayBuffer) => ipcRenderer.invoke("agent:audio", wav),
+  submitWakeAudio: (wav: ArrayBuffer) => ipcRenderer.invoke("agent:wakeAudio", wav),
+  interrupt: (reason) => ipcRenderer.invoke("agent:interrupt", reason ?? "user"),
   setClickThrough: (enabled: boolean) => ipcRenderer.invoke("overlay:setClickThrough", enabled),
   setInteractiveRegion: (rect) => ipcRenderer.invoke("overlay:setInteractive", rect),
   getVoiceHealth: () => ipcRenderer.invoke("voice:health"),
